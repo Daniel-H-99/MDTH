@@ -1,0 +1,122 @@
+env:
+    raw_path: '/mnt/warping-shared/warping-data' 
+    common_path: '/mnt/warping-shared/warping-common'
+    proc_path: '/mnt/warping-shared/warping-processed'
+    serv_path: '/mnt/warping-shared/warping-serving'
+    temp_path: '/mnt/warping-shared/warping-temp'
+const:
+    SUCCESS: 1
+    FAILED: 0
+TH:
+    common:
+        checkpoints:
+            landmark_model:
+                dir: '@COMMON_PATH@/th/checkpoints/landmark'
+            he_estimator:
+                model: '@COMMON_PATH@/th/checkpoints/bfv2v/headpose.tar'
+                config: '@COMMON_PATH@/th/checkpoints/bfv2v/config/vox-256-renderer_v16.yaml'
+            faceformer:
+                dir: '@COMMON_PATH@/th/checkpoints/faceformer'
+                model: '@COMMON_PATH@/th/checkpoints/faceformer/vocaset.pth'
+            bfv2v:
+                model: '@COMMON_PATH@/th/checkpoints/bfv2v/v16.7/00002099-checkpoint.pth.tar'
+                config: '@COMMON_PATH@/th/checkpoints/bfv2v/config/vox-256-renderer_v16.7.yaml'            
+                # model: '@COMMON_PATH@/th/checkpoints/bfv2v/v16.6.4/best.pt'
+                # config: '@COMMON_PATH@/th/checkpoints/bfv2v/config/vox-256-renderer_v16.6.yaml'
+        attr:
+            fps: 30
+            flame_path:  '@COMMON_PATH@/th/flame'
+    preprocess:
+        input:
+            audio_dir: '@RAW_PATH@/@TWIN_ID@/audio/00000.wav'
+            src_dir: '@RAW_PATH@/@TWIN_ID@/img/00000.png'
+            drv_dir: '@RAW_PATH@/@TWIN_ID@/video/30_00000.mp4'
+        output: 
+            save_path: '@PROC_PATH@/@TWIN_ID@/processed'
+    inference:
+        attr:
+            faceformer:
+                model_name: 'vocaset'
+                dataset: 'vocaset'
+                fps: 30
+                feature_dim: 64
+                period: 30
+                vertice_dim: 15069
+                device: 'cuda'
+                train_subjects: "FaceTalk_170728_03272_TA FaceTalk_170904_00128_TA FaceTalk_170725_00137_TA FaceTalk_170915_00223_TA FaceTalk_170811_03274_TA FaceTalk_170913_03279_TA FaceTalk_170904_03276_TA FaceTalk_170912_03278_TA"
+                test_subjects: "FaceTalk_170809_00138_TA FaceTalk_170731_00024_TA"
+                id_landmarks_path: ''
+                output_path: "demo/output"
+                wav_path: "demo/wav/test.wav"
+                result_path: "demo/result"
+                static_landmark_embedding_path: '@COMMON_PATH@/th/flame/flame_static_embedding.pkl'
+                condition: "FaceTalk_170725_00137_TA"
+                subject: "FaceTalk_170809_00138_TA"
+                background_black: True
+                template_path: '@COMMON_PATH@/th/checkpoints/faceformer/FaceTalk_170725_00137_TA.ply'
+                params_path: '@COMMON_PATH@/th/checkpoints/faceformer/params.npy'
+                add_eye_blink: False
+                num_blinks: 2
+                blink_duration: 15
+                generic_model_path: "@COMMON_PATH@/th/flame/generic_model.pkl"
+            bfv2v:
+                source_image: ''
+                driving_video: ''
+                result_video: ''
+                driven_dir: ''
+                from_flame: True
+                gen: 'spade'
+                ignore_emotion: True
+                relative: True 
+                adapt_scale: True 
+                find_best_frame: False
+                yaw: None
+                pitch: None
+                roll: None
+                pca_path: "@COMMON_PATH@/th/checkpoints/bfv2v/eye_pca.pt"
+        input: 
+            load_path: '@RAW_PATH@/@TWIN_ID@/upload/'
+        output:
+            save_path: '@PROC_PATH@/@TWIN_ID@/result/output.mp4'
+
+# some: values
+# deployment: 
+#     999999999:
+#         ref_audio:
+#             - '0/preprocess/selected/ref/whcho_narrative_0523.wav' 
+#         checkpoints: 
+#             model: '0/checkpoints/tts/tts-whcho-0627/checkpoint_last.pth.tar' 
+#             config: '0/checkpoints/tts/tts-whcho-0627/config.json'
+#     0:
+#         ref_audio:
+#             - '0/preprocess/selected/ref/whcho_narrative_0523.wav' 
+#         kfa_ref_audio:
+#             - '0/preprocess/selected/kfa_ref/yongil_gogo.wav' 
+#             - '0/preprocess/selected/kfa_ref/kevin_thisis.wav'
+#             - '0/preprocess/selected/kfa_ref/yongil_youcando.wav'
+#         checkpoints: 
+#             model: '0/checkpoints/tts/tts-whcho-0627/checkpoint_last.pth.tar' 
+#             config: '0/checkpoints/tts/tts-whcho-0627/config.json'
+#     1:
+#         ref_audio:
+#             - '1/preprocess/selected/ref/moothie_04.wav' 
+#         checkpoints:
+#             model: '1/checkpoints/tts/tts-moothie-0627/checkpoint_last.pth.tar' 
+#             config: '1/checkpoints/tts/tts-moothie-0627/config.json'
+
+# deployment: #for fixed inference
+#             999999999:
+#                 some: 'values'  
+# 0:
+#     some: 'values'
+# 1:
+#     some: 'values'  
+# kfa:
+#     - video_path: '#TWIN_ID#/KFA/update/video_1'
+#       video_track_path: '#TWIN_ID#/KFA/update/video_1.pckl'
+#     - video_path: '#TWIN_ID#/KFA/update/video_2'
+#       video_track_path: '#TWIN_ID#/KFA/update/video_2.pckl'
+#     - video_path: '#TWIN_ID#/KFA/update/video_3'
+#       video_track_path: '#TWIN_ID#/KFA/update/video_3.pckl'    
+
+    

@@ -1,0 +1,14 @@
+pipeline_config: pipeline_config.yml
+workspace: /mnt/warping-shared/warping-processed
+driving_video_list: [
+    /mnt/warping-shared/warping-processed/00001/processed/th/drv,
+    /mnt/warping-shared/warping-processed/00002/processed/th/drv,
+    /mnt/warping-shared/warping-processed/00003/processed/th/drv,
+    /mnt/warping-shared/warping-processed/00004/processed/th/drv
+]
+gpus: 0,1,2,3
+examples: [
+    ['examples/img/00001.png', 'examples/audio/emma.wav', 0],
+    ['examples/img/00000.png', 'examples/audio/obama.wav', 2],
+    ['examples/img/00002.png', 'examples/audio/kkj.wav', 1],
+]

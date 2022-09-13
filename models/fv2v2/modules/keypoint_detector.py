@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder
 
 
 class KPDetector(nn.Module):
@@ -165,53 +165,51 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, estimate_jacobian=True):
         super(ExpTransformer, self).__init__()
-
-        # self.id_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
+        self.num_layer = num_layer
+        self.id_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
         self.exp_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
         
-        # self.fc_roll = nn.Linear(2048, num_bins)
-        # self.fc_pitch = nn.Linear(2048, num_bins)
-        # self.fc_yaw = nn.Linear(2048, num_bins)
+        self.fc_roll = nn.Linear(2048, num_bins)
+        self.fc_pitch = nn.Linear(2048, num_bins)
+        self.fc_yaw = nn.Linear(2048, num_bins)
 
-        # self.fc_t = nn.Linear(2048, 3)
+        self.fc_t = nn.Linear(2048, 3)
+        self.fc_exp = nn.Linear(2048, 3 * num_kp)
 
-        # self.fc_id = nn.Sequential(
-        #     nn.Linear(2048, 3*num_kp),
-        #     nn.Tanh()
-        # )
-        self.fc_exp = nn.Sequential(
+        self.fc_id = nn.Sequential(
             nn.Linear(2048, 3*num_kp),
-            # nn.Tanh()
+            nn.Tanh()
         )
+        self.exp_decoder = Resnet1DEncoder(self.num_layer, 2048 * 2, 2048)
 
-        latent_dim = 2048
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(latent_dim * 2, latent_dim)
-        )
+        # latent_dim = 2048
 
-    def fuse(self, id_latent, exp_latent):
-        x = self.mlp(torch.cat([id_latent, exp_latent], dim=-1))
-        x = F.leaky_relu(x, 0.2)
-        return x
+    # def fuse(self, id_latent, exp_latent):
+    #     x = self.mlp(torch.cat([id_latent, exp_latent], dim=-1))
+    #     x = F.leaky_relu(x, 0.2)
+    #     return x
 
     def forward(self, src, drv):
-        # id_latent = self.id_encoder(src)
+        id_latent = self.id_encoder(src)
         exp_latent = self.exp_encoder(drv)
 
-        # id_kp = self.fc_id(id_latent).view(len(id_latent), -1, 3)
+        id_kp = self.fc_id(id_latent).view(len(id_latent), -1, 3)
+
+        concat_latent = torch.cat([exp_latent, id_latent], dim=-1)
+        fused_latent = self.exp_decoder(concat_latent) # B x 3 * num_kp
 
         # fused_latent = self.fuse(id_latent, exp_latent)
 
-        # yaw = self.fc_roll(fused_latent)
-        # pitch = self.fc_pitch(fused_latent)
-        # roll = self.fc_yaw(fused_latent)
-        # t = self.fc_t(fused_latent)
+        yaw = self.fc_roll(fused_latent)
+        pitch = self.fc_pitch(fused_latent)
+        roll = self.fc_yaw(fused_latent)
+        t = self.fc_t(fused_latent)
         exp = self.fc_exp(exp_latent)
 
-        # return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'id': id_kp}
-        return {'exp': exp}
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'id': id_kp}
+        # return {'id': id_kp, 'exp': exp}
 
 class HEEstimator(nn.Module):
     """

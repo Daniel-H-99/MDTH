@@ -12,11 +12,11 @@ from frames_dataset import FramesDataset4
 
 from modules.generator import OcclusionAwareGenerator, OcclusionAwareSPADEGenerator
 from modules.discriminator import MultiScaleDiscriminator
-from modules.keypoint_detector import KPDetector, ExpTransformer
+from modules.keypoint_detector import KPDetector, ExpTransformer, HEEstimator
 
 import torch
 
-from train import train_hie
+from train import train_adapter
 
 if __name__ == "__main__":
     
@@ -31,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_dir", default='/mnt/aitrics_ext/ext01/daniel/checkpoint/MDTH', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
     parser.add_argument("--checkpoint_ref", default='00000189-checkpoint.pth.tar', help="path to checkpoint to restore")
+    parser.add_argument("--pretrained_pose", action='store_true', help="path to checkpoint to restore")
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
                         help="Names of the devices comma separated.")
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Print model architecture")
@@ -73,6 +74,15 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
        hie_estimator.to(opt.device_ids[0])
 
+    if opt.pretrained_pose:
+        he_estimator = HEEstimator(**config['model_params']['exp_transformer_params'],
+                                **config['model_params']['common_params'])
+        
+        if torch.cuda.is_available():
+            he_estimator.to(opt.device_ids[0])
+    else:
+        he_estimator = None
+
     dataset = FramesDataset4(is_train=(opt.mode == 'train'), **config['dataset_params'])
 
     if not os.path.exists(log_dir):
@@ -82,4 +92,4 @@ if __name__ == "__main__":
 
     if opt.mode == 'train':
         print(f"Training with stage {opt.stage}...")
-        train_hie(config, generator, discriminator, hie_estimator, opt.checkpoint, log_dir, dataset, opt.device_ids)
+        train_adapter(config, generator, discriminator, hie_estimator, opt.checkpoint, log_dir, dataset, opt.device_ids, he_estimator=he_estimator, checkpoint_ref=opt.checkpoint_ref)

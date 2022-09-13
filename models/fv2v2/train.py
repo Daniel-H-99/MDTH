@@ -85,7 +85,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             print(cache_log)
             logger.log_epoch(epoch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
 
-def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_dir, dataset, device_ids):
+def train_adapter(config, generator, discriminator, hie_estimator, checkpoint, log_dir, dataset, device_ids, he_estimator=None, checkpoint_ref=None):
     train_params = config['train_params']
 
     optimizer_generator = torch.optim.Adam(generator.parameters(), lr=train_params['lr_generator'], betas=(0.5, 0.999))
@@ -98,6 +98,13 @@ def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_d
     else:
         start_epoch = 0
 
+    if he_estimator is not None:
+        assert checkpoint_ref is not None
+        Logger.load_cpk(checkpoint_ref, he_estimator=he_estimator)
+        for p in he_estimator.parameters():
+            p.requires_grad = False
+        he_estimator.eval()
+
     scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
     scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
@@ -109,7 +116,7 @@ def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_d
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=16, drop_last=True)
 
-    generator_full = GeneratorFullModelWithTF(hie_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
+    generator_full = GeneratorFullModelWithTF(hie_estimator, generator, discriminator, train_params, he_estimator=he_estimator, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
     discriminator_full = DiscriminatorFullModelWithTF(generator, discriminator, train_params)
 
     if torch.cuda.is_available():

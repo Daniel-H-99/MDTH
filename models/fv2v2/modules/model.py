@@ -260,13 +260,14 @@ class GeneratorFullModelWithTF(torch.nn.Module):
     Merge all generator related updates into single model for better multi-gpu usage
     """
 
-    def __init__(self, hie_estimator, generator, discriminator, train_params, estimate_jacobian=True):
+    def __init__(self, hie_estimator, generator, discriminator, train_params, he_estimator=None, estimate_jacobian=True):
         super(GeneratorFullModelWithTF, self).__init__()
         self.hie_estimator = hie_estimator
         self.generator = generator
         self.discriminator = discriminator
         self.train_params = train_params
         self.scales = train_params['scales']
+        self.he_estimator = he_estimator
         self.disc_scales = self.discriminator.scales
         self.pyramid = ImagePyramide(self.scales, generator.image_channel)
         if torch.cuda.is_available():
@@ -295,6 +296,14 @@ class GeneratorFullModelWithTF(torch.nn.Module):
         hie_source = self.hie_estimator(x['source'], x['source'])
         hie_driving = self.hie_estimator(x['source'], x['driving'])
 
+        if self.he_estimator is not None:
+            he_source = self.he_estimator(x['source'])
+            he_driving = self.he_driving(x['driving'])
+            del he_source['exp']
+            del he_driving['exp']
+            hie_source.update(he_source)
+            hie_driving.update(he_driving)
+            
         kp_canonical = {'value': hie_source['id']}    # {'value': value, 'jacobian': jacobian}   
 
         kp_source = keypoint_transformation(kp_canonical, hie_source, self.estimate_jacobian, exp_first=True)

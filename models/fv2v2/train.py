@@ -103,7 +103,7 @@ def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_d
     scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
                                           last_epoch=start_epoch - 1)
     scheduler_hie_estimator = MultiStepLR(optimizer_hie_estimator, train_params['epoch_milestones'], gamma=0.1,
-                                        last_epoch=-1 + start_epoch * (train_params['lr_hie_estimator'] != 0))
+                                        last_epoch=-1)
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
@@ -155,7 +155,7 @@ def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_d
                                      'hie_estimator': hie_estimator,
                                      'optimizer_generator': optimizer_generator,
                                      'optimizer_discriminator': optimizer_discriminator,
-                                     'optimizer_hie_estimator': hie_estimator}, inp=x, out=generated)
+                                     'optimizer_hie_estimator': optimizer_hie_estimator}, inp=x, out=generated)
 
 def train(config, generator, discriminator, kp_detector, he_estimator, checkpoint, log_dir, dataset, device_ids):
     train_params = config['train_params']

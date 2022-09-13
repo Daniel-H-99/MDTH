@@ -168,19 +168,19 @@ class ExpTransformer(nn.Module):
     def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
         super(ExpTransformer, self).__init__()
 
-        # self.id_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
+        self.id_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
         self.exp_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
         
-        # self.fc_roll = nn.Linear(2048, num_bins)
-        # self.fc_pitch = nn.Linear(2048, num_bins)
-        # self.fc_yaw = nn.Linear(2048, num_bins)
+        self.fc_roll = nn.Linear(2048, num_bins)
+        self.fc_pitch = nn.Linear(2048, num_bins)
+        self.fc_yaw = nn.Linear(2048, num_bins)
 
-        # self.fc_t = nn.Linear(2048, 3)
+        self.fc_t = nn.Linear(2048, 3)
 
-        # self.fc_id = nn.Sequential(
-        #     nn.Linear(2048, 3*num_kp),
-        #     nn.Tanh()
-        # )
+        self.fc_id = nn.Sequential(
+            nn.Linear(2048, 3*num_kp),
+            nn.Tanh()
+        )
         self.fc_exp = nn.Sequential(
             nn.Linear(2048, 3*num_kp),
             # nn.Tanh()
@@ -197,21 +197,21 @@ class ExpTransformer(nn.Module):
         return x
 
     def forward(self, src, drv):
-        # id_latent = self.id_encoder(src)
+        id_latent = self.id_encoder(src)
         exp_latent = self.exp_encoder(drv)
 
-        # id_kp = self.fc_id(id_latent).view(len(id_latent), -1, 3)
+        id_kp = self.fc_id(id_latent).view(len(id_latent), -1, 3)
 
-        # fused_latent = self.fuse(id_latent, exp_latent)
+        fused_latent = self.fuse(id_latent, exp_latent)
 
-        # yaw = self.fc_roll(fused_latent)
-        # pitch = self.fc_pitch(fused_latent)
-        # roll = self.fc_yaw(fused_latent)
-        # t = self.fc_t(fused_latent)
+        yaw = self.fc_roll(fused_latent)
+        pitch = self.fc_pitch(fused_latent)
+        roll = self.fc_yaw(fused_latent)
+        t = self.fc_t(fused_latent)
         exp = self.fc_exp(exp_latent)
 
-        # return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'id': id_kp}
-        return {'exp': exp}
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'id': id_kp}
+        # return {'exp': exp}
 
 class HEEstimator(nn.Module):
     """

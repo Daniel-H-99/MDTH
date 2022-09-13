@@ -298,7 +298,7 @@ class GeneratorFullModelWithTF(torch.nn.Module):
 
         if self.he_estimator is not None:
             he_source = self.he_estimator(x['source'])
-            he_driving = self.he_driving(x['driving'])
+            he_driving = self.he_estimator(x['driving'])
             del he_source['exp']
             del he_driving['exp']
             hie_source.update(he_source)

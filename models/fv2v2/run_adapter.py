@@ -75,7 +75,7 @@ if __name__ == "__main__":
        hie_estimator.to(opt.device_ids[0])
 
     if opt.pretrained_pose:
-        he_estimator = HEEstimator(**config['model_params']['exp_transformer_params'],
+        he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
                                 **config['model_params']['common_params'])
         
         if torch.cuda.is_available():

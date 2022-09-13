@@ -1,3 +1,7 @@
 *.tar
 *.pth
+models/fv2v2/log/
+models/fv2v2/*.pt
+models/fv2v2/*.tar
+models/fv2v2/*.pth
 

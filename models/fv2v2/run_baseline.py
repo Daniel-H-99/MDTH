@@ -16,7 +16,7 @@ from modules.keypoint_detector import KPDetector, HEEstimator
 
 import torch
 
-from train import train
+from train import train_baseline
 
 if __name__ == "__main__":
     
@@ -82,6 +82,12 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         he_estimator.to(opt.device_ids[0])
 
+    he_estimator_ref = HEEstimator(**config['model_params']['he_estimator_params'],
+                               **config['model_params']['common_params'])
+
+    if torch.cuda.is_available():
+        he_estimator_ref.to(opt.device_ids[0])
+
     dataset = FramesDataset4(is_train=(opt.mode == 'train'), **config['dataset_params'])
 
     if not os.path.exists(log_dir):
@@ -91,4 +97,4 @@ if __name__ == "__main__":
 
     if opt.mode == 'train':
         print("Training...")
-        train(config, generator, discriminator, kp_detector, he_estimator, opt.checkpoint, log_dir, dataset, opt.device_ids, checkpoint_ref=checkpoint_ref)
+        train_baseline(config, generator, discriminator, kp_detector, he_estimator, opt.checkpoint, log_dir, dataset, opt.device_ids, he_estimator_ref=he_estimator_ref, checkpoint_ref=checkpoint_ref)

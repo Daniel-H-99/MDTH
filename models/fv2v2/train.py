@@ -94,8 +94,8 @@ def train_baseline(config, generator, discriminator, kp_detector, he_estimator, 
     optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_he_estimator'], betas=(0.5, 0.999))
 
     if checkpoint is not None:
-        start_epoch = Logger.load_cpk(checkpoint, generator, discriminator, kp_detector, he_estimator,
-                                      optimizer_generator, optimizer_discriminator, optimizer_kp_detector, optimizer_he_estimator)
+        start_epoch = Logger.load_cpk(checkpoint, generator=generator, discriminator=discriminator, kp_detector=kp_detector, he_estimator=he_estimator,
+                                      optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator, optimizer_kp_detector=optimizer_kp_detector, optimizer_he_estimator=optimizer_he_estimator)
     else:
         start_epoch = 0
 

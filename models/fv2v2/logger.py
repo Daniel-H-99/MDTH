@@ -81,7 +81,7 @@ class Logger:
         if optimizer_he_estimator is not None:
             optimizer_he_estimator.load_state_dict(checkpoint['optimizer_he_estimator'])
         if optimizer_hie_estimator is not None:
-            optimizer_he_estimator.load_state_dict(checkpoint['optimizer_hie_estimator'])
+            optimizer_hie_estimator.load_state_dict(checkpoint['optimizer_hie_estimator'])
 
         return checkpoint['epoch']
 

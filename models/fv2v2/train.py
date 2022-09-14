@@ -63,8 +63,8 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 optimizer.zero_grad()
 
                 
-                if False:
-                # if train_params['loss_weights']['generator_gan'] != 0:
+                # if False:
+                if train_params['loss_weights']['generator_gan'] != 0:
                     optimizer_discriminator.zero_grad()
                     losses_discriminator = discriminator_full(x, generated)
                     loss_values = [val.mean() for val in losses_discriminator.values()]
@@ -83,7 +83,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             scheduler.step()
             cache_log = f'cache hit ratio : {num_cache_hit / num_item_call * 100:.2f} %'
             print(cache_log)
-            logger.log_epoch(epoch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
+            logger.log_epoch(e poch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
 
 def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_dir, dataset, device_ids):
     train_params = config['train_params']

@@ -291,6 +291,8 @@ class GeneratorFullModelWithTF(torch.nn.Module):
                 self.hopenet = self.hopenet.cuda()
                 self.hopenet.eval()
 
+        if self.he_estimator is not None:
+            print(f'Using pretrained he estimator')
 
     def forward(self, x):
         hie_source = self.hie_estimator(x['source'], x['source'])
@@ -360,7 +362,7 @@ class GeneratorFullModelWithTF(torch.nn.Module):
             transformed_frame = transform.transform_frame(x['driving'])
 
             transformed_hie_driving = self.hie_estimator(x['source'], transformed_frame)
-
+            transformed_hie_driving.update(he_driving)
             transformed_kp = keypoint_transformation(kp_canonical, transformed_hie_driving, self.estimate_jacobian, exp_first=True)
 
             generated['transformed_frame'] = transformed_frame

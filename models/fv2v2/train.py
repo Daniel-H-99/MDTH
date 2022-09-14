@@ -83,7 +83,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             scheduler.step()
             cache_log = f'cache hit ratio : {num_cache_hit / num_item_call * 100:.2f} %'
             print(cache_log)
-            logger.log_epoch(e poch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
+            logger.log_epoch(epoch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
 
 def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_dir, dataset, device_ids):
     train_params = config['train_params']

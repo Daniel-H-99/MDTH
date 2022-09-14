@@ -5,7 +5,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from logger import Logger
-from modules.model import GeneratorFullModelWithTF, DiscriminatorFullModelWithTF, ExpTransformerTrainer
+from modules.model import GeneratorFullModelWithRefHe, DiscriminatorFullModelWithRefHe, GeneratorFullModelWithTF, DiscriminatorFullModelWithTF, ExpTransformerTrainer
 
 from torch.optim.lr_scheduler import MultiStepLR
 

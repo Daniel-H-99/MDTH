@@ -31,7 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
     parser.add_argument("--checkpoint_ref", default='00000189-checkpoint.pth.tar', help="path to checkpoint to restore")
     parser.add_argument("--pretrained_pose", action='store_true', help="path to checkpoint to restore")
-    parser.add_argument("--device_ids", default="0, 1, 2, 3, 4, 5, 6, 7", type=lambda x: list(map(int, x.split(','))),
+    parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
                         help="Names of the devices comma separated.")
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Print model architecture")
     parser.set_defaults(verbose=False)
@@ -82,11 +82,13 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         he_estimator.to(opt.device_ids[0])
 
-    he_estimator_ref = HEEstimator(**config['model_params']['he_estimator_params'],
-                               **config['model_params']['common_params'])
-
-    if torch.cuda.is_available():
-        he_estimator_ref.to(opt.device_ids[0])
+    if opt.pretrained_pose:
+        he_estimator_ref = HEEstimator(**config['model_params']['he_estimator_params'],
+                            **config['model_params']['common_params'])
+        if torch.cuda.is_available():
+            he_estimator_ref.to(opt.device_ids[0])
+    else:
+        he_estimator_ref = None
 
     dataset = FramesDataset4(is_train=(opt.mode == 'train'), **config['dataset_params'])
 
@@ -97,4 +99,4 @@ if __name__ == "__main__":
 
     if opt.mode == 'train':
         print("Training...")
-        train_baseline(config, generator, discriminator, kp_detector, he_estimator, opt.checkpoint, log_dir, dataset, opt.device_ids, he_estimator_ref=he_estimator_ref, checkpoint_ref=checkpoint_ref)
+        train_baseline(config, generator, discriminator, kp_detector, he_estimator, opt.checkpoint, log_dir, dataset, opt.device_ids, he_estimator_ref=he_estimator_ref, checkpoint_ref=opt.checkpoint_ref)

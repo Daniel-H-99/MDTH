@@ -260,9 +260,9 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
     Merge all generator related updates into single model for better multi-gpu usage
     """
 
-    def __init__(self, kp_detector, he_estimator, generator, discriminator, train_params, he_estimator_ref=None, estimate_jacobian=True):
-        super(GeneratorFullModelWithTF, self).__init__()
-        self.kp_detector = kp_detector
+    def __init__(self, kp_extractor, he_estimator, generator, discriminator, train_params, he_estimator_ref=None, estimate_jacobian=True):
+        super(GeneratorFullModelWithRefHe, self).__init__()
+        self.kp_extractor = kp_extractor
         self.he_estimator = he_estimator
         self.generator = generator
         self.discriminator = discriminator
@@ -294,13 +294,21 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
 
 
     def forward(self, x):
-        hie_source = self.hie_estimator(x['source'], x['source'])
-        hie_driving = self.hie_estimator(x['source'], x['driving'])
+        kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}  
 
-        kp_canonical = {'value': hie_source['id']}    # {'value': value, 'jacobian': jacobian}   
+        he_source = self.he_estimator(x['source'])
+        he_driving = self.he_estimator(x['driving'])
 
-        kp_source = keypoint_transformation(kp_canonical, hie_source, self.estimate_jacobian, exp_first=True)
-        kp_driving = keypoint_transformation(kp_canonical, hie_driving, self.estimate_jacobian, exp_first=True)
+        if self.he_estimator is not None:
+            he_source_ref = self.he_estimator(x['source'])
+            he_driving_ref = self.he_estimator(x['driving'])
+            del he_source_ref['exp']
+            del he_driving_ref['exp']
+            he_source.update(he_source_ref)
+            he_driving_ref.update(he_driving_ref) 
+
+        kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
+        kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
 
         generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
         generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
@@ -352,9 +360,9 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
             transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
             transformed_frame = transform.transform_frame(x['driving'])
 
-            transformed_hie_driving = self.hie_estimator(x['source'], transformed_frame)
+            transformed_he_driving = self.he_estimator(transformed_frame)
 
-            transformed_kp = keypoint_transformation(kp_canonical, transformed_hie_driving, self.estimate_jacobian, exp_first=True)
+            transformed_kp = keypoint_transformation(kp_canonical, transformed_he_driving, self.estimate_jacobian)
 
             generated['transformed_frame'] = transformed_frame
             generated['transformed_kp'] = transformed_kp
@@ -412,7 +420,7 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
             pitch_gt = headpose_pred_to_degree(pitch_gt)
             roll_gt = headpose_pred_to_degree(roll_gt)
 
-            yaw, pitch, roll = hie_driving['yaw'], hie_driving['pitch'], hie_driving['roll']
+            yaw, pitch, roll = he_driving['yaw'], he_driving['pitch'], he_driving['roll']
             yaw = headpose_pred_to_degree(yaw)
             pitch = headpose_pred_to_degree(pitch)
             roll = headpose_pred_to_degree(roll)
@@ -421,10 +429,58 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
             loss_values['headpose'] = self.loss_weights['headpose'] * value
 
         if self.loss_weights['expression'] != 0:
-            value = torch.norm(hie_driving['exp'], p=1, dim=-1).mean()
+            value = torch.norm(he_driving['exp'], p=1, dim=-1).mean()
             loss_values['expression'] = self.loss_weights['expression'] * value
 
         return loss_values, generated
+
+class DiscriminatorFullModelWithRefHe(torch.nn.Module):
+    """
+    Merge all discriminator related updates into single model for better multi-gpu usage
+    """
+
+    def __init__(self, generator, discriminator, train_params):
+        super(DiscriminatorFullModelWithRefHe, self).__init__()
+        self.generator = generator
+        self.discriminator = discriminator
+        self.train_params = train_params
+        self.scales = self.discriminator.scales
+        self.pyramid = ImagePyramide(self.scales, generator.image_channel)
+        if torch.cuda.is_available():
+            self.pyramid = self.pyramid.cuda()
+
+        self.loss_weights = train_params['loss_weights']
+
+        self.zero_tensor = None
+
+    def get_zero_tensor(self, input):
+        if self.zero_tensor is None:
+            self.zero_tensor = torch.FloatTensor(1).fill_(0).cuda()
+            self.zero_tensor.requires_grad_(False)
+        return self.zero_tensor.expand_as(input)
+
+    def forward(self, x, generated):
+        pyramide_real = self.pyramid(x['driving'])
+        pyramide_generated = self.pyramid(generated['prediction'].detach())
+
+        discriminator_maps_generated = self.discriminator(pyramide_generated)
+        discriminator_maps_real = self.discriminator(pyramide_real)
+
+        loss_values = {}
+        value_total = 0
+        for scale in self.scales:
+            key = 'prediction_map_%s' % scale
+            if self.train_params['gan_mode'] == 'hinge':
+                value = -torch.mean(torch.min(discriminator_maps_real[key]-1, self.get_zero_tensor(discriminator_maps_real[key]))) - torch.mean(torch.min(-discriminator_maps_generated[key]-1, self.get_zero_tensor(discriminator_maps_generated[key])))
+            elif self.train_params['gan_mode'] == 'ls':
+                value = ((1 - discriminator_maps_real[key]) ** 2 + discriminator_maps_generated[key] ** 2).mean()
+            else:
+                raise ValueError('Unexpected gan_mode {}'.format(self.train_params['gan_mode']))
+
+            value_total += self.loss_weights['discriminator_gan'] * value
+        loss_values['disc_gan'] = value_total
+
+        return loss_values
 
 
 

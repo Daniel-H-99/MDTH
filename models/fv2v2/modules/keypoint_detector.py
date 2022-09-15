@@ -168,48 +168,61 @@ class ExpTransformer(nn.Module):
     def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, estimate_jacobian=True):
         super(ExpTransformer, self).__init__()
         self.num_layer = num_layer
-        self.id_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
-        self.exp_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
-        
+        self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
+
         # self.fc_roll = nn.Linear(2048, num_bins)
         # self.fc_pitch = nn.Linear(2048, num_bins)
         # self.fc_yaw = nn.Linear(2048, num_bins)
 
         # self.fc_t = nn.Linear(2048, 3)
-        self.fc_exp = nn.Linear(2048, 3 * num_kp)
+        
+        # self.exp_proj = nn.Linear(1024, 512)
+        # self.id_proj = nn.Linear(1024, 512)
 
         self.fc_id = nn.Sequential(
-            nn.Linear(2048, 3*num_kp),
+            nn.Linear(1024, 3*num_kp),
             nn.Tanh()
         )
-        self.exp_decoder = Resnet1DEncoder(self.num_layer, 2048 * 2, 2048)
+
+        self.fc_exp = nn.Sequential(
+            nn.Linear(1024, 3*num_kp),
+            nn.Tanh()
+        )
+
+        self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
 
         # latent_dim = 2048
 
-    # def fuse(self, id_latent, exp_latent):
-    #     x = self.mlp(torch.cat([id_latent, exp_latent], dim=-1))
-    #     x = F.leaky_relu(x, 0.2)
-    #     return x
+    def split_embedding(self, img_embedding):
+        id_embedding, style_embedding, exp_embedding = img_embedding.split([1024, 512, 512])
+        
+        return {'id': id_embedding, 'style': style_embedding, 'exp': exp_embedding}
+
+    def fuse(self, style, exp):
+        input = torch.cat([style, exp], dim=1)
+        output = self.exp_encoder(input)
+        return output
+
+    def encode(self, img):
+        embedding = self.encoder(img)
+        return self.split_embedding(embedding)
+
+    def decode(self, embedding):
+        res = {}
+        if 'id' in embedding:
+            res['id'] = self.fc_id(embedding['id']).view(len(embedding['id']), -1, 3)
+        if 'style' in embedding and 'exp' in embedding:
+            res['exp'] = self.fc_exp(self.fuse(embedding['style'], embedding['exp']))
+        return res
 
     def forward(self, src, drv):
-        id_latent = self.id_encoder(src)
-        exp_latent = self.exp_encoder(drv)
+        src_embedding = self.encode(src)
+        drv_embedding = self.encode(drv)
 
-        id_kp = self.fc_id(id_latent).view(len(id_latent), -1, 3)
-
-        concat_latent = torch.cat([exp_latent, id_latent], dim=-1)
-        fused_latent = self.exp_decoder(concat_latent) # B x 3 * num_kp
-
-        # fused_latent = self.fuse(id_latent, exp_latent)
-
-        # yaw = self.fc_roll(fused_latent)
-        # pitch = self.fc_pitch(fused_latent)
-        # roll = self.fc_yaw(fused_latent)
-        # t = self.fc_t(fused_latent)
-        exp = self.fc_exp(exp_latent)
-
-        # return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'id': id_kp}
-        return {'id': id_kp, 'exp': exp}
+        src_ouput = self.decode(src_embedding)
+        drv_output = self.decode({'style': src_embedding['style'], 'exp': drv_embedding['exp']})
+    
+        return {'id': src_ouput['id'], 'src_exp': src_output['exp'], 'drv_exp': drv_output['exp']}
 
 class HEEstimator(nn.Module):
     """

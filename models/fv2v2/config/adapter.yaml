@@ -64,11 +64,11 @@ train_params:
   num_epochs: 300
   num_repeats: 1
   epoch_milestones: [180,]
-  lr_generator: 5.0e-5
-  lr_discriminator: 5.0e-5
-  lr_hie_estimator: 5.0e-5
+  lr_generator: 5.0e-4
+  lr_discriminator: 5.0e-4
+  lr_hie_estimator: 5.0e-4
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 8
+  batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'

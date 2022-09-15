@@ -295,8 +295,9 @@ class GeneratorFullModelWithTF(torch.nn.Module):
             print(f'Using pretrained he estimator')
 
     def forward(self, x):
-        hie_source = self.hie_estimator(x['source'], x['source'])
-        hie_driving = self.hie_estimator(x['source'], x['driving'])
+        hie = self.hie_estimator(x['source'], x['driving'])
+        hie_source = {'id': hie['id'], 'exp': hie['src_exp']}
+        hie_driving = {'id': hie['id'], 'exp': hie['drv_exp']}
 
         if self.he_estimator is not None:
             he_source = self.he_estimator(x['source'])
@@ -361,7 +362,7 @@ class GeneratorFullModelWithTF(torch.nn.Module):
             transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
             transformed_frame = transform.transform_frame(x['driving'])
 
-            transformed_hie_driving = self.hie_estimator(x['source'], transformed_frame)
+            transformed_hie_driving = self.hie_estimator.decode({'style': style_embedding, 'exp': self.hie_estimator.encode(transformed_frame)['exp']})
             transformed_hie_driving.update(he_driving)
             transformed_kp = keypoint_transformation(kp_canonical, transformed_hie_driving, self.estimate_jacobian, exp_first=True)
 

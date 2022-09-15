@@ -14,18 +14,17 @@ dataset_params:
       saturation: 0.1
       hue: 0.1
 
-
 model_params:
   common_params:
     num_kp: 15 
     image_channel: 3                    
     feature_channel: 32
-    estimate_jacobian: False   # True
+    estimate_jacobian: False
   kp_detector_params:
      temperature: 0.1
      block_expansion: 32            
      max_features: 1024
-     scale_factor: 0.25         # 0.25
+     scale_factor: 0.25
      num_blocks: 5
      reshape_channel: 16384  # 16384 = 1024 * 16
      reshape_depth: 16
@@ -33,11 +32,6 @@ model_params:
      block_expansion: 64            
      max_features: 2048
      num_bins: 66
-  exp_transformer_params:
-    block_expansion: 64            
-    max_features: 2048
-    num_bins: 66
-    num_layer: 1
   generator_params:
     block_expansion: 64
     max_features: 512
@@ -61,18 +55,18 @@ model_params:
     sn: True
 
 train_params:
-  num_epochs: 300
-  num_repeats: 4
+  num_epochs: 100
+  num_repeats: 8
   epoch_milestones: [180,]
-  lr_generator: 5.0e-4
-  lr_discriminator: 1.0e-3
-  lr_kp_detector: 5.0e-4
-  lr_he_estimator: 5.0e-4
+  lr_generator: 5.0e-5
+  lr_discriminator: 2.0e-4
+  lr_kp_detector: 5.0e-5
+  lr_he_estimator: 5.0e-5
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 12
+  batch_size: 2
   scales: [1, 0.5, 0.25, 0.125]
-  checkpoint_freq: 10
-  hopenet_snapshot: 'hopenet_robust_alpha1.pkl'
+  checkpoint_freq: 20
+  hopenet_snapshot: '/home/face-vid2vid-demo/hopenet_robust_alpha1.pkl'
   transform_params:
     sigma_affine: 0.05
     sigma_tps: 0.005
@@ -83,9 +77,9 @@ train_params:
     feature_matching: [25, 25, 10, 10]
     perceptual: [10, 10, 10, 10, 10]
     equivariance_value: 10
-    equivariance_jacobian: 0    # 10
-    keypoint: 50
-    headpose: 0
+    equivariance_jacobian: 0
+    keypoint: 50 # 10
+    headpose: 0 # 20
     expression: 5
 
 visualizer_params:

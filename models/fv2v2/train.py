@@ -101,6 +101,7 @@ def train_baseline(config, generator, discriminator, kp_detector, he_estimator, 
 
     if he_estimator_ref is not None:
         assert checkpoint_ref is not None
+        print(f'loading reference checkpoint: {checkpoint_ref}')
         Logger.load_cpk(checkpoint_ref, he_estimator=he_estimator_ref)
         for p in he_estimator_ref.parameters():
             p.requires_grad = False

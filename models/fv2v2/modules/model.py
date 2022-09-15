@@ -305,7 +305,7 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
             del he_source_ref['exp']
             del he_driving_ref['exp']
             he_source.update(he_source_ref)
-            he_driving_ref.update(he_driving_ref) 
+            he_driving.update(he_driving_ref) 
 
         kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
         kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)

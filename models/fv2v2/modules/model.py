@@ -199,7 +199,7 @@ def tf_keypoint_transformation(kp_canonical, tf_kp_canonical, he):
     yaw, pitch, roll = torch.tensor(he['yaw']), torch.tensor(he['pitch']), torch.tensor(he['roll'])
     t, exp = torch.tensor(he['t']), torch.tensor(he['exp'])
     exp = tf_kp_canonical['exp'].view(len(kp), -1, 3)
-    kp = kp + exp
+    # kp = kp + exp
 
     yaw = headpose_pred_to_degree(yaw)
     pitch = headpose_pred_to_degree(pitch)
@@ -211,10 +211,10 @@ def tf_keypoint_transformation(kp_canonical, tf_kp_canonical, he):
     kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
 
     # keypoint translation
-    t = t.unsqueeze_(1).repeat(1, kp.shape[1], 1)
+    t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
     kp_t = kp_rotated + t
 
-    kp_transformed = kp_t
+    kp_transformed = kp_t + exp
 
     return {'value': kp_transformed}
 

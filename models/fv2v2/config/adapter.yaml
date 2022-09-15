@@ -79,7 +79,7 @@ train_params:
   loss_weights:
     generator_gan: 1                  
     discriminator_gan: 1
-    feature_matching: [10, 10, 10, 10]
+    feature_matching: [25, 25, 10, 10]
     perceptual: [10, 10, 10, 10, 10]
     equivariance_value: 10
     equivariance_jacobian: 0    # 10

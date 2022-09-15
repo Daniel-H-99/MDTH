@@ -65,7 +65,7 @@ train_params:
   num_repeats: 4
   epoch_milestones: [180,]
   lr_generator: 5.0e-4
-  lr_discriminator: 1.0e-3
+  lr_discriminator: 5.0e-4
   lr_kp_detector: 5.0e-4
   lr_he_estimator: 5.0e-4
   gan_mode: 'hinge'    # hinge or ls

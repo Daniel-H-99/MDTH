@@ -64,10 +64,10 @@ train_params:
   num_epochs: 300
   num_repeats: 4
   epoch_milestones: [180,]
-  lr_generator: 5.0e-5
+  lr_generator: 2.0e-5
   lr_discriminator: 2.0e-4
-  lr_kp_detector: 5.0e-5
-  lr_he_estimator: 5.0e-5
+  lr_kp_detector: 2.0e-5
+  lr_he_estimator: 2.0e-5
   gan_mode: 'hinge'    # hinge or ls
   batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]

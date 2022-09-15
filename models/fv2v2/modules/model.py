@@ -299,7 +299,7 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
         he_source = self.he_estimator(x['source'])
         he_driving = self.he_estimator(x['driving'])
 
-        if self.he_estimator is not None:
+        if self.he_estimator_ref is not None:
             he_source_ref = self.he_estimator_ref(x['source'])
             he_driving_ref = self.he_estimator_ref(x['driving'])
             del he_source_ref['exp']

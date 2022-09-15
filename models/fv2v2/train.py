@@ -5,7 +5,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from logger import Logger
-from modules.model import GeneratorFullModelWithTF, DiscriminatorFullModelWithTF, ExpTransformerTrainer
+from modules.model import DiscriminatorFullModel, ExpTransformerTrainer
 
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -17,16 +17,21 @@ from frames_dataset import DatasetRepeater
 def train_transformer(config, stage, exp_transformer, generator, discriminator, kp_detector, he_estimator, checkpoint, checkpoint_ref, log_dir, dataset, device_ids):
     train_params = config['train_params']
 
-    optimizer = torch.optim.Adam(exp_transformer.parameters(), lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
 
-    Logger.load_cpk(checkpoint_ref, generator, discriminator, kp_detector, he_estimator)
+    optimizer = torch.optim.Adam(exp_transformer.parameters(), lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
+
+
+    Logger.load_cpk(checkpoint_ref, generator=generator, kp_detector=kp_detector, he_estimator=he_estimator)
 
     if checkpoint is not None:
-        start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer)
+        start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, discriminator=discriminator, optimizer_exp_transformer=optimizer, optimizer_discriminator=optimizer_discriminator)
     else:
         start_epoch = 0
 
     scheduler = MultiStepLR(optimizer, train_params['epoch_milestones'], gamma=0.1,
+                                      last_epoch=start_epoch - 1)
+    scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
@@ -34,11 +39,16 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=16, drop_last=True)
 
     trainer = ExpTransformerTrainer(stage, exp_transformer, kp_detector, he_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
+    discriminator_full = DiscriminatorFullModel(kp_detector, generator, discriminator, train_params)
+    
+    for p in discriminator_full.parameters():
+        p.requires_grad = True
     # generator_full = GeneratorFullModel(kp_detector, he_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
 
 
     if torch.cuda.is_available():
         # generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
+        discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
         trainer = DataParallelWithCallback(trainer, device_ids=device_ids)
 
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
@@ -63,8 +73,8 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 optimizer.zero_grad()
 
                 
-                if False:
-                # if train_params['loss_weights']['generator_gan'] != 0:
+                # if False:
+                if train_params['loss_weights']['generator_gan'] != 0:
                     optimizer_discriminator.zero_grad()
                     losses_discriminator = discriminator_full(x, generated)
                     loss_values = [val.mean() for val in losses_discriminator.values()]
@@ -81,9 +91,13 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 logger.log_iter(losses=losses)
 
             scheduler.step()
+            scheduler_discriminator.step()
             cache_log = f'cache hit ratio : {num_cache_hit / num_item_call * 100:.2f} %'
             print(cache_log)
-            logger.log_epoch(epoch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
+            logger.log_epoch(epoch, {'exp_transformer': exp_transformer,
+                                    'discriminator': discriminator,
+                                    'optimizer_exp_transformer': optimizer,
+                                    'optimizer_discriminator': optimizer_discriminator}, inp=x, out=generated)
 
 def train_hie(config, generator, discriminator, hie_estimator, checkpoint, log_dir, dataset, device_ids):
     train_params = config['train_params']

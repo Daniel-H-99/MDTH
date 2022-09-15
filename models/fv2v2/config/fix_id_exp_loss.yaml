@@ -61,13 +61,11 @@ model_params:
 
 train_params:
   num_epochs: 300
-  num_repeats: 1
-  epoch_milestones: [100,200]
-  lr_generator: 2.0e-4
-  lr_discriminator: 2.0e-4
-  lr_kp_detector: 2.0e-4
-  lr_he_estimator: 2.0e-4
-  lr_exp_transformer: 2.0e-5
+  num_repeats: 4
+  epoch_milestones: [180]
+  lr_generator: 5.0e-4
+  lr_discriminator: 1.0e-3
+  lr_exp_transformer: 5.0e-4
   gan_mode: 'hinge'    # hinge or ls
   batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
@@ -80,11 +78,11 @@ train_params:
   loss_weights:
     generator_gan: 1                  
     discriminator_gan: 1
-    feature_matching: [10, 10, 10, 10]
+    feature_matching: [25, 25, 10, 10]
     perceptual: [10, 10, 10, 10, 10]
     equivariance_value: 10
     equivariance_jacobian: 0    # 10
-    keypoint: 10
+    keypoint: 50
     headpose: 0   # 20
     expression: 5
     same_identity: 1

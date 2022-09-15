@@ -755,7 +755,6 @@ class ExpTransformerTrainer(GeneratorFullModel):
         for p in self.parameters():
             p.requires_grad = False
         self.exp_transformer = exp_transformer
-        self.eval()
         self.stage = 1
 
     def forward(self, x):
@@ -814,6 +813,34 @@ class ExpTransformerTrainer(GeneratorFullModel):
                         value = torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
                         value_total += self.loss_weights['perceptual'][i] * value
                 loss_values['perceptual'] = value_total
+
+            if self.loss_weights['generator_gan'] != 0:
+                discriminator_maps_generated = self.discriminator(pyramide_generated)
+                discriminator_maps_real = self.discriminator(pyramide_real)
+                value_total = 0
+                for scale in self.disc_scales:
+                    key = 'prediction_map_%s' % scale
+                    if self.train_params['gan_mode'] == 'hinge':
+                        value = -torch.mean(discriminator_maps_generated[key])
+                    elif self.train_params['gan_mode'] == 'ls':
+                        value = ((1 - discriminator_maps_generated[key]) ** 2).mean()
+                    else:
+                        raise ValueError('Unexpected gan_mode {}'.format(self.train_params['gan_mode']))
+
+                    value_total += self.loss_weights['generator_gan'] * value
+                loss_values['gen_gan'] = value_total
+
+                if sum(self.loss_weights['feature_matching']) != 0:
+                    value_total = 0
+                    for scale in self.disc_scales:
+                        key = 'feature_maps_%s' % scale
+                        for i, (a, b) in enumerate(zip(discriminator_maps_real[key], discriminator_maps_generated[key])):
+                            if self.loss_weights['feature_matching'][i] == 0:
+                                continue
+                            value = torch.abs(a - b).mean()
+                            value_total += self.loss_weights['feature_matching'][i] * value
+                        loss_values['feature_matching'] = value_total
+
 
             if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
                 transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])

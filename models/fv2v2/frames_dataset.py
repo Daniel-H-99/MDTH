@@ -19,6 +19,8 @@ from sklearn.model_selection import train_test_split
 from imageio import mimread
 import imageio
 import time 
+from utils.util import extract_mesh, get_mesh_image, draw_section, draw_mouth_mask, LEFT_EYE_IDX, LEFT_EYEBROW_IDX,LEFT_IRIS_IDX, RIGHT_EYE_IDX, RIGHT_EYEBROW_IDX, RIGHT_IRIS_IDX, IN_LIP_IDX, OUT_LIP_IDX
+import torch
 
 def extend_bbox(bbox, frame):
     H, W = frame.shape[:2]
@@ -86,9 +88,8 @@ class FramesDataset3(Dataset):
     """
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
-                 random_seed=0, pairs_list=None, augmentation_params=None, train_params=None, cache=None, z_bias=0):
-        self.train_params = train_params
-        self.sections = self.train_params['sections']
+                 random_seed=0, pairs_list=None, augmentation_params=None, sections=None, cache=None, z_bias=0):
+        self.sections = sections
         self.root_dir = root_dir
         self._root_dir = root_dir
         self.cache = cache
@@ -180,15 +181,15 @@ class FramesDataset3(Dataset):
                     cache_path = os.path.join(self.cache, rel_path)
                     if not os.path.exists(cache_path):
                         hit = False
-                        print(f'loading to cache: {cache_path}')
+                        # print(f'loading to cache: {cache_path}')
                         t = time.time()
                         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                         shutil.copytree(path, cache_path)
                         t = time.time() - t
-                        print(f'loaded to cache ({t}): {cache_path}')
+                        # print(f'loaded to cache ({t}): {cache_path}')
                     else:
                         hit = True
-                        print(f'cache hit: {cache_path}')
+                        # print(f'cache hit: {cache_path}')
                     path = cache_path
 
                 frames_dir = os.path.join(path, 'frames')
@@ -229,36 +230,37 @@ class FramesDataset3(Dataset):
                 video_array = np.stack(video_array, axis=0)
 
                 if self.transform is not None:
-                    video_arraye = self.transform(video_array)
+                    video_array = self.transform(video_array)
 
                 meshes = []
 
                 for i, frame in enumerate(video_array):
                     L = self.frame_shape[0]
-                    mesh, noise, normalizer = extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
+                    # mesh, noise, normalizer = extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
                     A = np.array([[-1, -1, 0]], dtype='float32') # 3 x 1
-                    
+                    mesh = {}
+
                     mesh_mp = extract_mesh(img_as_ubyte(frame))
                     right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
                     left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
                     # print(f'right_iris shape: {right_iris.shape}')
-                    mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
-                    mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
+                    # mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
+                    # mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
                     # print(f'right_iris: {mesh["value"][3]}')
                     # print(f'right_iris: {mesh["value"][3]}')
                     # print(f'right_eye: {mesh["value"][36:42].mean(axis=0)}')
                     # mesh_mp['raw_value'][:, 2] = mesh_mp['raw_value'][:, 2]
-                    mesh_mp['_raw_value'] = torch.tensor(mesh_mp['raw_value'])
+                    mesh_mp['_raw_value'] = mesh_mp['raw_value'].clone().detach()
 
 
-                    if noise is not None:
-                        mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
-                        # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
-                        # print(f'onise: {noise[0]}')
-                        # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
-                        # print(f'mesh open right: {mesh["raw_value"][36:42]}')
-                        mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
-                        mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
+                    # if noise is not None:
+                    #     mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
+                    #     # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
+                    #     # print(f'onise: {noise[0]}')
+                    #     # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
+                    #     # print(f'mesh open right: {mesh["raw_value"][36:42]}')
+                    #     mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
+                    #     mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
 
                     # print(f'value: {mesh["raw_value"][36:42]} ')
                     # print(f'mp value: {mesh_mp["raw_value"][RIGHT_EYE_IDX]}')
@@ -279,6 +281,9 @@ class FramesDataset3(Dataset):
                     
                     mesh['mesh_img_sec'] =  self.get_mesh_image_section(mesh_mp['raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG)
                     mesh['_mesh_img_sec'] =  self.get_mesh_image_section(mesh_mp['_raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG)
+                    # mesh['raw_value'] = mesh_mp['raw_value'] * 2 / L + A
+                    # mesh['_raw_value'] = mesh_mp['_raw_value'] * 2 / L + A
+
                     # print('msh img sec got')
                     # print(f'mp sections: {MP_SECTIONS}')
                     # print(f'mesh mp shape: {mesh_mp["raw_value"].shape}')
@@ -327,7 +332,7 @@ class FramesDataset3(Dataset):
         #     out['video'] = video.transpose((3, 0, 1, 2))
         #     out['mesh'] = meshes
             
-        out['name'] = video_name
+        # out['name'] = video_name
 
         return out
 
@@ -392,12 +397,12 @@ class FramesDataset4(Dataset):
                     cache_path = os.path.join(self.cache, rel_path)
                     if not os.path.exists(cache_path):
                         hit = False
-                        print(f'loading to cache: {cache_path}')
+                        # print(f'loading to cache: {cache_path}')
                         t = time.time()
                         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                         shutil.copytree(path, cache_path)
                         t = time.time() - t
-                        print(f'loaded to cache ({t}): {cache_path}')
+                        # print(f'loaded to cache ({t}): {cache_path}')
                     else:
                         hit = True
                         # print(f'cache hit: {cache_path}')

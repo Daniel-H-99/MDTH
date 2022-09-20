@@ -255,6 +255,236 @@ def keypoint_transformation(kp_canonical, he, estimate_jacobian=True, exp_first=
 
     return {'value': kp_transformed, 'jacobian': jacobian_transformed}
 
+class GeneratorFullModelWithRefHe(torch.nn.Module):
+    """
+    Merge all generator related updates into single model for better multi-gpu usage
+    """
+
+    def __init__(self, kp_extractor, he_estimator, generator, discriminator, train_params, he_estimator_ref=None, estimate_jacobian=True):
+        super(GeneratorFullModelWithRefHe, self).__init__()
+        self.kp_extractor = kp_extractor
+        self.he_estimator = he_estimator
+        self.generator = generator
+        self.discriminator = discriminator
+        self.he_estimator_ref = he_estimator_ref
+        self.train_params = train_params
+        self.scales = train_params['scales']
+        self.disc_scales = self.discriminator.scales
+        self.pyramid = ImagePyramide(self.scales, generator.image_channel)
+        if torch.cuda.is_available():
+            self.pyramid = self.pyramid.cuda()
+
+        self.loss_weights = train_params['loss_weights']
+
+        self.estimate_jacobian = estimate_jacobian
+
+        if sum(self.loss_weights['perceptual']) != 0:
+            self.vgg = Vgg19()
+            if torch.cuda.is_available():
+                self.vgg = self.vgg.cuda()
+
+        if self.loss_weights['headpose'] != 0:
+            self.hopenet = hopenet.Hopenet(models.resnet.Bottleneck, [3, 4, 6, 3], 66)
+            print('Loading hopenet')
+            hopenet_state_dict = torch.load(train_params['hopenet_snapshot'])
+            self.hopenet.load_state_dict(hopenet_state_dict)
+            if torch.cuda.is_available():
+                self.hopenet = self.hopenet.cuda()
+                self.hopenet.eval()
+
+
+    def forward(self, x):
+        kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}  
+
+        he_source = self.he_estimator(x['source'])
+        he_driving = self.he_estimator(x['driving'])
+
+        if self.he_estimator_ref is not None:
+            he_source_ref = self.he_estimator_ref(x['source'])
+            he_driving_ref = self.he_estimator_ref(x['driving'])
+            del he_source_ref['exp']
+            del he_driving_ref['exp']
+            he_source.update(he_source_ref)
+            he_driving.update(he_driving_ref) 
+
+        kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
+        kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
+
+        generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
+        generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+
+        loss_values = {}
+
+        pyramide_real = self.pyramid(x['driving'])
+        pyramide_generated = self.pyramid(generated['prediction'])
+
+        if sum(self.loss_weights['perceptual']) != 0:
+            value_total = 0
+            for scale in self.scales:
+                x_vgg = self.vgg(pyramide_generated['prediction_' + str(scale)])
+                y_vgg = self.vgg(pyramide_real['prediction_' + str(scale)])
+
+                for i, weight in enumerate(self.loss_weights['perceptual']):
+                    value = torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
+                    value_total += self.loss_weights['perceptual'][i] * value
+            loss_values['perceptual'] = value_total
+
+        if self.loss_weights['generator_gan'] != 0:
+            discriminator_maps_generated = self.discriminator(pyramide_generated)
+            discriminator_maps_real = self.discriminator(pyramide_real)
+            value_total = 0
+            for scale in self.disc_scales:
+                key = 'prediction_map_%s' % scale
+                if self.train_params['gan_mode'] == 'hinge':
+                    value = -torch.mean(discriminator_maps_generated[key])
+                elif self.train_params['gan_mode'] == 'ls':
+                    value = ((1 - discriminator_maps_generated[key]) ** 2).mean()
+                else:
+                    raise ValueError('Unexpected gan_mode {}'.format(self.train_params['gan_mode']))
+
+                value_total += self.loss_weights['generator_gan'] * value
+            loss_values['gen_gan'] = value_total
+
+            if sum(self.loss_weights['feature_matching']) != 0:
+                value_total = 0
+                for scale in self.disc_scales:
+                    key = 'feature_maps_%s' % scale
+                    for i, (a, b) in enumerate(zip(discriminator_maps_real[key], discriminator_maps_generated[key])):
+                        if self.loss_weights['feature_matching'][i] == 0:
+                            continue
+                        value = torch.abs(a - b).mean()
+                        value_total += self.loss_weights['feature_matching'][i] * value
+                    loss_values['feature_matching'] = value_total
+
+        if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
+            transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
+            transformed_frame = transform.transform_frame(x['driving'])
+
+            transformed_he_driving = self.he_estimator(transformed_frame)
+
+            transformed_kp = keypoint_transformation(kp_canonical, transformed_he_driving, self.estimate_jacobian)
+
+            generated['transformed_frame'] = transformed_frame
+            generated['transformed_kp'] = transformed_kp
+
+            ## Value loss part
+            if self.loss_weights['equivariance_value'] != 0:
+                # project 3d -> 2d
+                kp_driving_2d = kp_driving['value'][:, :, :2]
+                transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                value = torch.abs(kp_driving_2d - transform.warp_coordinates(transformed_kp_2d)).mean()
+                loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value
+
+            ## jacobian loss part
+            if self.loss_weights['equivariance_jacobian'] != 0:
+                # project 3d -> 2d
+                transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                transformed_jacobian_2d = transformed_kp['jacobian'][:, :, :2, :2]
+                jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp_2d),
+                                                    transformed_jacobian_2d)
+                
+                jacobian_2d = kp_driving['jacobian'][:, :, :2, :2]
+                normed_driving = torch.inverse(jacobian_2d)
+                normed_transformed = jacobian_transformed
+                value = torch.matmul(normed_driving, normed_transformed)
+
+                eye = torch.eye(2).view(1, 1, 2, 2).type(value.type())
+
+                value = torch.abs(eye - value).mean()
+                loss_values['equivariance_jacobian'] = self.loss_weights['equivariance_jacobian'] * value
+
+        if self.loss_weights['keypoint'] != 0:
+            # print(kp_driving['value'].shape)     # (bs, k, 3)
+            value_total = 0
+            for i in range(kp_driving['value'].shape[1]):
+                for j in range(kp_driving['value'].shape[1]):
+                    dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
+                    dist = 0.1 - dist      # set Dt = 0.1
+                    dd = torch.gt(dist, 0) 
+                    value = (dist * dd).mean()
+                    value_total += value
+
+            kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
+            value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
+
+            value_total += value_depth
+            loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
+
+        if self.loss_weights['headpose'] != 0:
+            transform_hopenet =  transforms.Compose([transforms.Resize(size=(224, 224)),
+                                                     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+            driving_224 = transform_hopenet(x['driving'])
+
+            yaw_gt, pitch_gt, roll_gt = self.hopenet(driving_224)
+            yaw_gt = headpose_pred_to_degree(yaw_gt)
+            pitch_gt = headpose_pred_to_degree(pitch_gt)
+            roll_gt = headpose_pred_to_degree(roll_gt)
+
+            yaw, pitch, roll = he_driving['yaw'], he_driving['pitch'], he_driving['roll']
+            yaw = headpose_pred_to_degree(yaw)
+            pitch = headpose_pred_to_degree(pitch)
+            roll = headpose_pred_to_degree(roll)
+
+            value = torch.abs(yaw - yaw_gt).mean() + torch.abs(pitch - pitch_gt).mean() + torch.abs(roll - roll_gt).mean()
+            loss_values['headpose'] = self.loss_weights['headpose'] * value
+
+        if self.loss_weights['expression'] != 0:
+            value = torch.norm(he_driving['exp'], p=1, dim=-1).mean()
+            loss_values['expression'] = self.loss_weights['expression'] * value
+
+        return loss_values, generated
+
+class DiscriminatorFullModelWithRefHe(torch.nn.Module):
+    """
+    Merge all discriminator related updates into single model for better multi-gpu usage
+    """
+
+    def __init__(self, generator, discriminator, train_params):
+        super(DiscriminatorFullModelWithRefHe, self).__init__()
+        self.generator = generator
+        self.discriminator = discriminator
+        self.train_params = train_params
+        self.scales = self.discriminator.scales
+        self.pyramid = ImagePyramide(self.scales, generator.image_channel)
+        if torch.cuda.is_available():
+            self.pyramid = self.pyramid.cuda()
+
+        self.loss_weights = train_params['loss_weights']
+
+        self.zero_tensor = None
+
+    def get_zero_tensor(self, input):
+        if self.zero_tensor is None:
+            self.zero_tensor = torch.FloatTensor(1).fill_(0).cuda()
+            self.zero_tensor.requires_grad_(False)
+        return self.zero_tensor.expand_as(input)
+
+    def forward(self, x, generated):
+        pyramide_real = self.pyramid(x['driving'])
+        pyramide_generated = self.pyramid(generated['prediction'].detach())
+
+        discriminator_maps_generated = self.discriminator(pyramide_generated)
+        discriminator_maps_real = self.discriminator(pyramide_real)
+
+        loss_values = {}
+        value_total = 0
+        for scale in self.scales:
+            key = 'prediction_map_%s' % scale
+            if self.train_params['gan_mode'] == 'hinge':
+                value = -torch.mean(torch.min(discriminator_maps_real[key]-1, self.get_zero_tensor(discriminator_maps_real[key]))) - torch.mean(torch.min(-discriminator_maps_generated[key]-1, self.get_zero_tensor(discriminator_maps_generated[key])))
+            elif self.train_params['gan_mode'] == 'ls':
+                value = ((1 - discriminator_maps_real[key]) ** 2 + discriminator_maps_generated[key] ** 2).mean()
+            else:
+                raise ValueError('Unexpected gan_mode {}'.format(self.train_params['gan_mode']))
+
+            value_total += self.loss_weights['discriminator_gan'] * value
+        loss_values['disc_gan'] = value_total
+
+        return loss_values
+
+
+
+
 class GeneratorFullModelWithTF(torch.nn.Module):
     """
     Merge all generator related updates into single model for better multi-gpu usage
@@ -697,13 +927,230 @@ class GeneratorFullModel(torch.nn.Module):
 
         return loss_values, generated
 
+class GeneratorFullModelWithSeg(torch.nn.Module):
+    """
+    Merge all generator related updates into single model for better multi-gpu usage
+    """
+
+    def __init__(self, kp_extractor, he_estimator, generator, discriminator, train_params, he_estimator_ref=None, estimate_jacobian=True):
+        super(GeneratorFullModelWithSeg, self).__init__()
+        self.kp_extractor = kp_extractor
+        self.he_estimator = he_estimator
+        self.generator = generator
+        self.discriminator = discriminator
+        self.he_estimator_ref = he_estimator_ref
+        self.train_params = train_params
+        self.scales = train_params['scales']
+        self.disc_scales = self.discriminator.scales
+        self.pyramid = ImagePyramide(self.scales, generator.image_channel)
+        self.pyramid_cond = ImagePyramide(self.scales, generator.image_channel + 1)
+        if torch.cuda.is_available():
+            self.pyramid = self.pyramid.cuda()
+            self.pyramid_cond = self.pyramid_cond.cuda()
+            
+        self.loss_weights = train_params['loss_weights']
+
+        self.estimate_jacobian = estimate_jacobian
+
+        if sum(self.loss_weights['perceptual']) != 0:
+            self.vgg = Vgg19()
+            if torch.cuda.is_available():
+                self.vgg = self.vgg.cuda()
+
+        if self.loss_weights['headpose'] != 0:
+            self.hopenet = hopenet.Hopenet(models.resnet.Bottleneck, [3, 4, 6, 3], 66)
+            print('Loading hopenet')
+            hopenet_state_dict = torch.load(train_params['hopenet_snapshot'])
+            self.hopenet.load_state_dict(hopenet_state_dict)
+            if torch.cuda.is_available():
+                self.hopenet = self.hopenet.cuda()
+                self.hopenet.eval()
+
+
+    def forward(self, x):
+        kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}  
+
+        he_source = self.he_estimator(x['source'])
+        he_driving = self.he_estimator(x['driving'])
+
+        if self.he_estimator_ref is not None:
+            he_source_ref = self.he_estimator_ref(x['source'])
+            he_driving_ref = self.he_estimator_ref(x['driving'])
+            del he_source_ref['exp']
+            del he_driving_ref['exp']
+            he_source.update(he_source_ref)
+            he_driving.update(he_driving_ref) 
+
+        kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
+        kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
+
+        generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
+        generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+
+        loss_values = {}
+
+        pyramide_real = self.pyramid(x['driving'])
+        pyramide_generated = self.pyramid(generated['prediction'])
+
+        if sum(self.loss_weights['perceptual']) != 0:
+            value_total = 0
+            for scale in self.scales:
+                x_vgg = self.vgg(pyramide_generated['prediction_' + str(scale)])
+                y_vgg = self.vgg(pyramide_real['prediction_' + str(scale)])
+
+                for i, weight in enumerate(self.loss_weights['perceptual']):
+                    value = torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
+                    value_total += self.loss_weights['perceptual'][i] * value
+            loss_values['perceptual'] = value_total
+
+        if self.loss_weights['motion_match'] != 0:
+            motion = generated['deformation'] # B x d x h x w x 3
+            motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w
+            it_section = x['driving_mesh']['raw_value'] # B x N x 3
+            motion_GT = x['source_mesh']['raw_value'] # B x N x 3
+            it_section_eye = it_section[:,  x['source_mesh']['MP_EYE_SECTIONS'][0].long()]
+            motion_GT_eye = motion_GT[:,  x['source_mesh']['MP_EYE_SECTIONS'][0].long()]
+            it_section_mouth = it_section[:,  x['source_mesh']['MP_MOUTH_SECTIONS'][0].long()]
+            motion_GT_mouth = motion_GT[:,  x['source_mesh']['MP_MOUTH_SECTIONS'][0].long()]
+            # print(f'it section shape: {it_section.shape}')
+            # print(f'motion_GT section shape: {motion_GT.shape}')
+            # print(f'motion shape: {motion.shape}')
+            motion_section = F.grid_sample(motion, it_section[:, :, None, None])
+            motion_section = motion_section.squeeze(4).squeeze(3).transpose(1,2) # B x N x 3
+
+            motion_section_eye = F.grid_sample(motion, it_section_eye[:, :, None, None])
+            motion_section_eye = motion_section_eye.squeeze(4).squeeze(3).transpose(1,2) # B x N x 3
+
+            motion_section_mouth = F.grid_sample(motion, it_section_mouth[:, :, None, None])
+            motion_section_mouth = motion_section_mouth.squeeze(4).squeeze(3).transpose(1,2) # B x N x 3
+
+            # print(f'motion Gt size {motion_GT.shape}')
+            # print(f'motion size {motion_section.shape}')
+            # print(f'motion_section: {motion_section}')
+            # print(f'motion_section_GT : {motion_GT}')
+            
+            loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
+                                            + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
+                                            + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
+
+        if self.loss_weights['generator_gan'] != 0:
+            pyramide_real = self.pyramid_cond(torch.cat([x['driving_mesh']['_mesh_img_sec'].cuda(), x['driving']], dim=1))
+            pyramide_generated = self.pyramid_cond(torch.cat([x['driving_mesh']['mesh_img_sec'].cuda(), generated['prediction']], dim=1))
+            discriminator_maps_generated = self.discriminator(pyramide_generated)
+            discriminator_maps_real = self.discriminator(pyramide_real)
+            
+            value_total = 0
+            for scale in self.disc_scales:
+                key = 'prediction_map_%s' % scale
+                if self.train_params['gan_mode'] == 'hinge':
+                    value = -torch.mean(discriminator_maps_generated[key])
+                elif self.train_params['gan_mode'] == 'ls':
+                    value = ((1 - discriminator_maps_generated[key]) ** 2).mean()
+                else:
+                    raise ValueError('Unexpected gan_mode {}'.format(self.train_params['gan_mode']))
+
+                value_total += self.loss_weights['generator_gan'] * value
+            loss_values['gen_gan'] = value_total
+
+            if sum(self.loss_weights['feature_matching']) != 0:
+                value_total = 0
+                for scale in self.disc_scales:
+                    key = 'feature_maps_%s' % scale
+                    for i, (a, b) in enumerate(zip(discriminator_maps_real[key], discriminator_maps_generated[key])):
+                        if self.loss_weights['feature_matching'][i] == 0:
+                            continue
+                        value = torch.abs(a - b).mean()
+                        value_total += self.loss_weights['feature_matching'][i] * value
+                    loss_values['feature_matching'] = value_total
+
+        if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
+            transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
+            transformed_frame = transform.transform_frame(x['driving'])
+
+            transformed_he_driving = self.he_estimator(transformed_frame)
+
+            transformed_kp = keypoint_transformation(kp_canonical, transformed_he_driving, self.estimate_jacobian)
+
+            generated['transformed_frame'] = transformed_frame
+            generated['transformed_kp'] = transformed_kp
+
+            ## Value loss part
+            if self.loss_weights['equivariance_value'] != 0:
+                # project 3d -> 2d
+                kp_driving_2d = kp_driving['value'][:, :, :2]
+                transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                value = torch.abs(kp_driving_2d - transform.warp_coordinates(transformed_kp_2d)).mean()
+                loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value
+
+            ## jacobian loss part
+            if self.loss_weights['equivariance_jacobian'] != 0:
+                # project 3d -> 2d
+                transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                transformed_jacobian_2d = transformed_kp['jacobian'][:, :, :2, :2]
+                jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp_2d),
+                                                    transformed_jacobian_2d)
+                
+                jacobian_2d = kp_driving['jacobian'][:, :, :2, :2]
+                normed_driving = torch.inverse(jacobian_2d)
+                normed_transformed = jacobian_transformed
+                value = torch.matmul(normed_driving, normed_transformed)
+
+                eye = torch.eye(2).view(1, 1, 2, 2).type(value.type())
+
+                value = torch.abs(eye - value).mean()
+                loss_values['equivariance_jacobian'] = self.loss_weights['equivariance_jacobian'] * value
+
+        if self.loss_weights['keypoint'] != 0:
+            # print(kp_driving['value'].shape)     # (bs, k, 3)
+            value_total = 0
+            for i in range(kp_driving['value'].shape[1]):
+                for j in range(kp_driving['value'].shape[1]):
+                    dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
+                    dist = 0.1 - dist      # set Dt = 0.1
+                    dd = torch.gt(dist, 0) 
+                    value = (dist * dd).mean()
+                    value_total += value
+
+            kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
+            value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
+
+            value_total += value_depth
+            loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
+
+        if self.loss_weights['headpose'] != 0:
+            transform_hopenet =  transforms.Compose([transforms.Resize(size=(224, 224)),
+                                                     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+            driving_224 = transform_hopenet(x['driving'])
+
+            yaw_gt, pitch_gt, roll_gt = self.hopenet(driving_224)
+            yaw_gt = headpose_pred_to_degree(yaw_gt)
+            pitch_gt = headpose_pred_to_degree(pitch_gt)
+            roll_gt = headpose_pred_to_degree(roll_gt)
+
+            yaw, pitch, roll = he_driving['yaw'], he_driving['pitch'], he_driving['roll']
+            yaw = headpose_pred_to_degree(yaw)
+            pitch = headpose_pred_to_degree(pitch)
+            roll = headpose_pred_to_degree(roll)
+
+            value = torch.abs(yaw - yaw_gt).mean() + torch.abs(pitch - pitch_gt).mean() + torch.abs(roll - roll_gt).mean()
+            loss_values['headpose'] = self.loss_weights['headpose'] * value
+
+        if self.loss_weights['expression'] != 0:
+            value = torch.norm(he_driving['exp'], p=1, dim=-1).mean()
+            loss_values['expression'] = self.loss_weights['expression'] * value
+
+        return loss_values, generated
+
+
+
+
 class DiscriminatorFullModelWithSeg(torch.nn.Module):
     """
     Merge all discriminator related updates into single model for better multi-gpu usage
     """
 
     def __init__(self, generator, discriminator, train_params):
-        super(DiscriminatorFullModel, self).__init__()
+        super(DiscriminatorFullModelWithSeg, self).__init__()
         self.generator = generator
         self.discriminator = discriminator
         self.train_params = train_params

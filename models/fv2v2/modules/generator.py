@@ -113,6 +113,7 @@ class OcclusionAwareGenerator(nn.Module):
         out = F.sigmoid(out)
 
         output_dict["prediction"] = out
+        output_dict["deformation"] = deformation
 
         return output_dict
 
@@ -247,5 +248,6 @@ class OcclusionAwareSPADEGenerator(nn.Module):
         out = self.decoder(out)
 
         output_dict["prediction"] = out
-
+        output_dict["deformation"] = deformation
+        
         return output_dict

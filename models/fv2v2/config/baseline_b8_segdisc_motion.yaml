@@ -88,6 +88,7 @@ train_params:
     keypoint: 50
     headpose: 0
     expression: 5
+    motion_match: 50
 
 visualizer_params:
   kp_size: 5

@@ -5,7 +5,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from logger import Logger
-from modules.model import GeneratorFullModelWithRefHe, DiscriminatorFullModelWithRefHe, GeneratorFullModelWithTF, DiscriminatorFullModelWithTF, ExpTransformerTrainer, DiscriminatorFullModelWithSeg
+from modules.model import GeneratorFullModelWithRefHe, DiscriminatorFullModelWithRefHe, GeneratorFullModelWithTF, DiscriminatorFullModelWithTF, ExpTransformerTrainer, GeneratorFullModelWithSeg, DiscriminatorFullModelWithSeg
 
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -120,7 +120,7 @@ def train_baseline(config, generator, discriminator, kp_detector, he_estimator, 
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=16, drop_last=True)
 
-    generator_full = GeneratorFullModelWithRefHe(kp_detector, he_estimator, generator, discriminator, train_params, he_estimator_ref=he_estimator_ref, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
+    generator_full = GeneratorFullModelWithSeg(kp_detector, he_estimator, generator, discriminator, train_params, he_estimator_ref=he_estimator_ref, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
     discriminator_full = DiscriminatorFullModelWithSeg(generator, discriminator, train_params)
 
     if torch.cuda.is_available():

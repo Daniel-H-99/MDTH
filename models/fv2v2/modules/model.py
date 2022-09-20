@@ -697,7 +697,7 @@ class GeneratorFullModel(torch.nn.Module):
 
         return loss_values, generated
 
-class iscriminatorFullModelWithSeg(torch.nn.Module):
+class DiscriminatorFullModelWithSeg(torch.nn.Module):
     """
     Merge all discriminator related updates into single model for better multi-gpu usage
     """

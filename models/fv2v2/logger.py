@@ -83,7 +83,11 @@ class Logger:
         if optimizer_hie_estimator is not None:
             optimizer_hie_estimator.load_state_dict(checkpoint['optimizer_hie_estimator'])
 
-        return checkpoint['epoch']
+        epoch = checkpoint['epoch']
+
+        del checkpoint
+        
+        return epoch
 
     def __enter__(self):
         return self

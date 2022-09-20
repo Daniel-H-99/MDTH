@@ -85,7 +85,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             print(cache_log)
             logger.log_epoch(epoch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
 
-def train_baseline(config, generator, discriminator, kp_detector, he_estimator, checkpoint, log_dir, dataset, device_ids, he_estimator_ref=None, checkpoint_ref=None):
+def train_baseline(config, generator, discriminator, kp_detector, he_estimator, checkpoint, log_dir, dataset, device_ids, checkpoint_ref=None, he_estimator_ref=None):
     train_params = config['train_params']
 
     optimizer_generator = torch.optim.Adam(generator.parameters(), lr=train_params['lr_generator'], betas=(0.5, 0.999))
@@ -99,13 +99,9 @@ def train_baseline(config, generator, discriminator, kp_detector, he_estimator, 
     else:
         start_epoch = 0
 
-    if he_estimator_ref is not None:
-        assert checkpoint_ref is not None
-        print(f'loading reference checkpoint: {checkpoint_ref}')
-        Logger.load_cpk(checkpoint_ref, he_estimator=he_estimator_ref)
-        for p in he_estimator_ref.parameters():
-            p.requires_grad = False
-        he_estimator_ref.eval()
+    if checkpoint_ref is not None:
+        Logger.load_cpk(checkpoint_ref, generator=generator, he_estimator=he_estimator, discriminator=discriminator, 
+                                    optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator, optimizer_he_estimator=optimizer_he_estimator)
 
     scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
@@ -120,8 +116,8 @@ def train_baseline(config, generator, discriminator, kp_detector, he_estimator, 
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=16, drop_last=True)
 
-    generator_full = GeneratorFullModelWithSeg(kp_detector, he_estimator, generator, discriminator, train_params, he_estimator_ref=he_estimator_ref, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
-    discriminator_full = DiscriminatorFullModelWithSeg(generator, discriminator, train_params)
+    generator_full = GeneratorFullModelWithRefHe(kp_detector, he_estimator, generator, discriminator, train_params, he_estimator_ref=he_estimator_ref, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
+    discriminator_full = DiscriminatorFullModelWithRefHe(generator, discriminator, train_params)
 
     if torch.cuda.is_available():
         generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)

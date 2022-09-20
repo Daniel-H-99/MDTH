@@ -70,8 +70,11 @@ if __name__ == "__main__":
     if opt.verbose:
         print(discriminator)
 
-    kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
-                             **config['model_params']['common_params'])
+    # kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
+    #                          **config['model_params']['common_params'])
+
+    kp_detector = ExpTransformer(**config['model_params']['exptransformer_params'],
+                               **config['model_params']['common_params'])
 
     if torch.cuda.is_available():
         kp_detector.to(opt.device_ids[0])

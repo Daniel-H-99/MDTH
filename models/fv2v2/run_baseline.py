@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 from time import gmtime, strftime
 from shutil import copy
 
-from frames_dataset import FramesDataset4
+from frames_dataset import FramesDataset3
 
 from modules.generator import OcclusionAwareGenerator, OcclusionAwareSPADEGenerator
 from modules.discriminator import MultiScaleDiscriminator
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     else:
         he_estimator_ref = None
 
-    dataset = FramesDataset4(is_train=(opt.mode == 'train'), **config['dataset_params'])
+    dataset = FramesDataset3(is_train=(opt.mode == 'train'), **config['dataset_params'])
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)

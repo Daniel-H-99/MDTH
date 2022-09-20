@@ -100,9 +100,8 @@ def train_baseline(config, generator, discriminator, kp_detector, he_estimator, 
         start_epoch = 0
 
     if checkpoint_ref is not None:
-        Logger.load_cpk(checkpoint_ref, generator=generator, he_estimator=he_estimator, discriminator=discriminator, 
-                                    optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator, optimizer_he_estimator=optimizer_he_estimator)
-
+        Logger.load_cpk(checkpoint_ref, generator=generator, discriminator=discriminator, 
+                                    optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator)
     scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
     scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,

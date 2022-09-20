@@ -326,7 +326,6 @@ class FramesDataset3(Dataset):
         # out['hopenet_source'] = hopenet_video_array[0]
         # out['hopenet_driving'] = hopenet_video_array[1]
         
-        
         # else:
         #     video = np.array(video_array, dtype='float32')
         #     out['video'] = video.transpose((3, 0, 1, 2))

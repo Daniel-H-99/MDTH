@@ -128,8 +128,10 @@ def train_baseline(config, generator, discriminator, kp_detector, he_estimator, 
         discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
 
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
+        print(f'start epochs')
         for epoch in trange(start_epoch, train_params['num_epochs']):
-            for x in dataloader:
+            print(f'staring epoch {epoch}')
+            for x in tqdm(dataloader):
                 losses_generator, generated = generator_full(x)
 
                 loss_values = [val.mean() for val in losses_generator.values()]

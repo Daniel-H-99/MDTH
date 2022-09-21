@@ -37,7 +37,6 @@ model_params:
     block_expansion: 64            
     max_features: 2048
     num_bins: 66
-    num_layer: 1
   generator_params:
     block_expansion: 64
     max_features: 512

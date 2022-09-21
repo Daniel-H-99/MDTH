@@ -197,7 +197,7 @@ class ExpTransformer(nn.Module):
         x = F.leaky_relu(x, 0.2)
         return x
 
-    def forward(self, src, drv):
+    def forward(self, src):
         id_latent = self.id_encoder(src)
         # exp_latent = self.exp_encoder(drv)
 

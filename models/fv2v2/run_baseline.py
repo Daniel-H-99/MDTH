@@ -12,7 +12,7 @@ from frames_dataset import FramesDataset4
 
 from modules.generator import OcclusionAwareGenerator, OcclusionAwareSPADEGenerator
 from modules.discriminator import MultiScaleDiscriminator
-from modules.keypoint_detector import KPDetector, HEEstimator
+from modules.keypoint_detector import KPDetector, HEEstimator, ExpTransformer
 
 import torch
 import torch
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     # kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
     #                          **config['model_params']['common_params'])
 
-    kp_detector = ExpTransformer(**config['model_params']['exptransformer_params'],
+    kp_detector = ExpTransformer(**config['model_params']['exp_transformer_params'],
                                **config['model_params']['common_params'])
 
     if torch.cuda.is_available():

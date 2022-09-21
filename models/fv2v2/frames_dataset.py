@@ -21,6 +21,7 @@ import imageio
 import time 
 from utils.util import extract_mesh, get_mesh_image, draw_section, draw_mouth_mask, LEFT_EYE_IDX, LEFT_EYEBROW_IDX,LEFT_IRIS_IDX, RIGHT_EYE_IDX, RIGHT_EYEBROW_IDX, RIGHT_IRIS_IDX, IN_LIP_IDX, OUT_LIP_IDX
 import torch
+from modules.landmark_model import LandmarkModel
 
 def extend_bbox(bbox, frame):
     H, W = frame.shape[:2]
@@ -98,6 +99,7 @@ class FramesDataset3(Dataset):
         self.pairs_list = pairs_list
         self.id_sampling = True
         self.z_bias = z_bias
+        self.landmark_model = LandmarkModel('/mnt/warping-shared/warping-common/th/checkpoints/landmark')
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))
@@ -135,7 +137,44 @@ class FramesDataset3(Dataset):
             res.append(X[sec[0]])
         return res
 
-    
+    def extract_openface_mesh(self, image, noise=None):
+        mesh = {}
+        H, W = image.shape[:2]
+        bb, lm = self.landmark_model.get_landmarks_fa(image)
+        # lm[:, 1] = H - lm[:, 1]
+        lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W)
+        # U = torch.from_numpy(U['U'])
+        normalizer = U['normalizer']
+        U = U['U']
+        # print(f'normed: {lm_normed_3d}')
+        if noise is not None:
+            # if np.r
+            noise = np.random.randn(3, 3) * noise
+            noise = noise.clip(-0.1, 0.1) * 100
+            lm_normed_3d[[3] + list(range(17, 22)) + list(range(36, 42))] += noise[[0]]
+            lm_normed_3d[[4] + list(range(22, 27)) + list(range(42, 48))] += noise[[1]]
+            lm_normed_3d[48:] += noise[[2]]
+            # lm_normed_3d = np.concatenate([lm_normed_3d, noise], axis=0)
+
+        lm_3d = np.concatenate([lm_normed_3d, np.ones((len(lm_normed_3d), 1))], axis=1) @ U
+        if noise is not None:
+            noise_real = noise @ U[:3, :3]
+        else:
+            noise_real = None
+
+        lm_3d = lm_3d[:, :3]
+        # lm_3d[:, 1] = H - lm_3d[:, 1] 
+        scale = H // 2
+        lm_scaled_3d = lm_normed_3d / scale  
+        mesh["raw_value"] = lm_3d
+        mesh["value"] = lm_scaled_3d.astype(np.float32)
+        mesh["U"] = U.astype(np.float32)
+        mesh["scale"] = scale
+        # print(f'landmark: {lm}')
+        # print(f'mesh: {mesh}')
+
+        return mesh, noise_real, normalizer
+        
     def concat_section(self, sections):
         # sections[]: (num_sections) x -1 x 3
         return np.concatenate(sections, axis=0)
@@ -236,16 +275,16 @@ class FramesDataset3(Dataset):
 
                 for i, frame in enumerate(video_array):
                     L = self.frame_shape[0]
-                    # mesh, noise, normalizer = extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
+                    mesh, noise, normalizer = self.extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
                     A = np.array([[-1, -1, 0]], dtype='float32') # 3 x 1
-                    mesh = {}
+                    # mesh = {}
 
                     mesh_mp = extract_mesh(img_as_ubyte(frame))
                     right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
                     left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
                     # print(f'right_iris shape: {right_iris.shape}')
-                    # mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
-                    # mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
+                    mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
+                    mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
                     # print(f'right_iris: {mesh["value"][3]}')
                     # print(f'right_iris: {mesh["value"][3]}')
                     # print(f'right_eye: {mesh["value"][36:42].mean(axis=0)}')
@@ -253,14 +292,14 @@ class FramesDataset3(Dataset):
                     mesh_mp['_raw_value'] = mesh_mp['raw_value'].clone().detach()
 
 
-                    # if noise is not None:
-                    #     mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
-                    #     # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
-                    #     # print(f'onise: {noise[0]}')
-                    #     # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
-                    #     # print(f'mesh open right: {mesh["raw_value"][36:42]}')
-                    #     mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
-                    #     mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
+                    if noise is not None:
+                        mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
+                        # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
+                        # print(f'onise: {noise[0]}')
+                        # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
+                        # print(f'mesh open right: {mesh["raw_value"][36:42]}')
+                        mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
+                        mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
 
                     # print(f'value: {mesh["raw_value"][36:42]} ')
                     # print(f'mp value: {mesh_mp["raw_value"][RIGHT_EYE_IDX]}')

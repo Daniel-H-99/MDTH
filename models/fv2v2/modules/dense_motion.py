@@ -12,7 +12,7 @@ class DenseMotionNetworkGeo(nn.Module):
 
     def __init__(self, block_expansion, num_blocks, sections, max_features, num_kp, feature_channel, reshape_depth, compress,
                  estimate_occlusion_map=False, headmodel=None):
-        super(DenseMotionNetwork, self).__init__()
+        super(DenseMotionNetworkGeo, self).__init__()
         # self.hourglass = Hourglass(block_expansion=block_expansion, in_features=(num_kp+1)*(feature_channel+1), max_features=max_features, num_blocks=num_blocks)
         self.hourglass = Hourglass(block_expansion=block_expansion, in_features=((num_kp+1)*(compress+1) + 1), max_features=max_features, num_blocks=num_blocks)
         

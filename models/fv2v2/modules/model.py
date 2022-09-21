@@ -460,9 +460,9 @@ class DiscriminatorFullModelWithRefHe(torch.nn.Module):
         return self.zero_tensor.expand_as(input)
 
     def forward(self, x, generated):
-        pyramide_real = self.pyramid(x['driving'])
-        pyramide_generated = self.pyramid(generated['prediction'].detach())
-
+        pyramide_real = self.pyramid(torch.cat([x['driving_mesh']['_mesh_img_sec'].cuda(), x['driving']], dim=1))
+        pyramide_generated = self.pyramid(torch.cat([x['driving_mesh']['mesh_img_sec'].cuda(), generated['prediction'].detach()], dim=1))
+        
         discriminator_maps_generated = self.discriminator(pyramide_generated)
         discriminator_maps_real = self.discriminator(pyramide_real)
 
@@ -1261,11 +1261,15 @@ class ExpTransformerTrainer(GeneratorFullModel):
         kp_source = x['source_mesh']
         kp_driving = x['driving_mesh']
         
-        exp_source = self.exp_transformer(x['source'])
+        tf_output = self.exp_transformer(x['source'])
+        src_exp = tf_output['src_exp']
+        drv_exp = tf_output['drv_exp']
+
         exp_driving = self.exp_transformer(x['driving'])
 
-        kp_source.update(exp_source)
-        kp_driving.update(exp_driving)
+        kp_source['exp'] = src_exp
+        kp_driving['exp'] = drv_exp
+
         # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
         # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
 
@@ -1404,8 +1408,8 @@ class ExpTransformerTrainer(GeneratorFullModel):
             transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
             transformed_frame = transform.transform_frame(x['driving'])
 
-            exp_transformed = self.exp_transformer(transformed_frame)
-
+            transformed_embedding = self.exp_transformer.encode(transformed_frame) 
+            exp_transformed = self.exp_transformer.decode({'style': tf_output['src_embedding']['style'], 'exp': transformed_embedding['exp']})
 
             transformed_kp = {'value': kp_driving['prior'] - kp_driving['exp'] + exp_transformed['exp']}
 

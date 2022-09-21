@@ -165,54 +165,64 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
+        self.num_layer = num_layer
+        self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
 
-        self.id_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
-        # self.exp_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
-        
         # self.fc_roll = nn.Linear(2048, num_bins)
         # self.fc_pitch = nn.Linear(2048, num_bins)
         # self.fc_yaw = nn.Linear(2048, num_bins)
 
         # self.fc_t = nn.Linear(2048, 3)
+        
+        # self.exp_proj = nn.Linear(1024, 512)
+        # self.id_proj = nn.Linear(1024, 512)
 
         self.fc_id = nn.Sequential(
-            nn.Linear(2048, 3*num_kp),
+            nn.Linear(1024, 3*num_kp),
             nn.Tanh()
         )
 
-        # self.fc_exp = nn.Sequential(
-        #     nn.Linear(2048, 3*num_kp),
-        #     # nn.Tanh()
-        # )
+        self.fc_exp = nn.Sequential(
+            nn.Linear(1024, 3*num_kp),
+            nn.Tanh()
+        )
 
-        latent_dim = 2048
-        # self.mlp = torch.nn.Sequential(
-        #     torch.nn.Linear(latent_dim * 2, latent_dim)
-        # )
+        # self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
 
-    def fuse(self, id_latent, exp_latent):
-        x = self.mlp(torch.cat([id_latent, exp_latent], dim=-1))
-        x = F.leaky_relu(x, 0.2)
-        return x
+        # latent_dim = 2048
 
-    def forward(self, src):
-        id_latent = self.id_encoder(src)
-        # exp_latent = self.exp_encoder(drv)
+    def split_embedding(self, img_embedding):
+        id_embedding, style_embedding, exp_embedding = img_embedding.split([1024, 512, 512])
+        
+        return {'id': id_embedding, 'style': style_embedding, 'exp': exp_embedding}
 
-        id_kp = self.fc_id(id_latent).view(len(id_latent), -1, 3)
+    def fuse(self, style, exp):
+        input = torch.cat([style, exp], dim=1)
+        output = self.exp_encoder(input)
+        return output
 
-        # fused_latent = self.fuse(id_latent, exp_latent)
+    def encode(self, img):
+        embedding = self.encoder(img)
+        return self.split_embedding(embedding)
 
-        # yaw = self.fc_roll(fused_latent)
-        # pitch = self.fc_pitch(fused_latent)
-        # roll = self.fc_yaw(fused_latent)
-        # t = self.fc_t(fused_latent)
-        # exp = self.fc_exp(exp_latent)
+    def decode(self, embedding):
+        res = {}
+        if 'id' in embedding:
+            res['id'] = self.fc_id(embedding['id']).view(len(embedding['id']), -1, 3)
+        if 'style' in embedding and 'exp' in embedding:
+            res['exp'] = self.fc_exp(self.fuse(embedding['style'], embedding['exp']))
+        return res
 
-        # return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'id': id_kp}
-        return {'value': id_kp}
+    def forward(self, src, drv):
+        src_embedding = self.encode(src)
+        drv_embedding = self.encode(drv)
+
+        src_ouput = self.decode(src_embedding)
+        drv_output = self.decode({'style': src_embedding['style'], 'exp': drv_embedding['exp']})
+    
+        return {'id': src_ouput['id'], 'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding}
 
 class HEEstimator(nn.Module):
     """

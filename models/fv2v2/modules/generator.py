@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from modules.util import ResBlock2d, SameBlock2d, UpBlock2d, DownBlock2d, ResBlock3d, SPADEResnetBlock
-from modules.dense_motion import DenseMotionNetwork
+from modules.dense_motion import DenseMotionNetwork, DenseMotionNetworkGeo
 
 
 class OcclusionAwareGenerator(nn.Module):
@@ -162,12 +162,12 @@ class SPADEDecoder(nn.Module):
 class OcclusionAwareSPADEGenerator(nn.Module):
 
     def __init__(self, image_channel, feature_channel, num_kp, block_expansion, max_features, num_down_blocks, reshape_channel, reshape_depth,
-                 num_resblocks, estimate_occlusion_map=False, dense_motion_params=None, estimate_jacobian=False):
+                 num_resblocks, estimate_occlusion_map=False, dense_motion_params=None, estimate_jacobian=False, sections=None):
         super(OcclusionAwareSPADEGenerator, self).__init__()
 
         if dense_motion_params is not None:
-            self.dense_motion_network = DenseMotionNetwork(num_kp=num_kp, feature_channel=feature_channel,
-                                                           estimate_occlusion_map=estimate_occlusion_map,
+            self.dense_motion_network = DenseMotionNetworkGeo(num_kp=num_kp, feature_channel=feature_channel,
+                                                           estimate_occlusion_map=estimate_occlusion_map, sections=sections,
                                                            **dense_motion_params)
         else:
             self.dense_motion_network = None

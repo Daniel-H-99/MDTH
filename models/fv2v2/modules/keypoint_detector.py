@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder
 
 
 class KPDetector(nn.Module):
@@ -189,7 +189,7 @@ class ExpTransformer(nn.Module):
             nn.Tanh()
         )
 
-        # self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
+        self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
 
         # latent_dim = 2048
 

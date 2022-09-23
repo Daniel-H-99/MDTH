@@ -187,6 +187,7 @@ class DenseMotionNetworkGeo(nn.Module):
         if 'exp' in kp_source and 'exp' in kp_driving:
             drv_normed = src_normed - kp_source['exp'] + kp_driving['exp']
 
+
         tmp = torch.cat([src_normed, torch.ones(src_normed.shape[0], src_normed.shape[1], 1).to(device) / kp_source['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
         tmp = tmp.matmul(kp_source['U']) # B x N x 4
         tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
@@ -229,6 +230,9 @@ class DenseMotionNetworkGeo(nn.Module):
         heatmap = self.create_heatmap_representations(deformed_feature, kp_driving, kp_source)
         out_dict['heatmap'] = heatmap
 
+        print(f'heatmap shape: {heatmap.shape}')
+        print(f'deformed_feature shape: {deformed_feature.shape}')
+        print(f'sparse motion shape: {sparse_motion.shape}')
         
         input = torch.cat([heatmap, deformed_feature], dim=2)
         input = input.view(bs, -1, d, h, w)

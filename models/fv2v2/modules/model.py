@@ -851,7 +851,9 @@ class GeneratorFullModel(torch.nn.Module):
 
         if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
             transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
-            transformed_frame = transform.transform_frame(x['driving'])
+            
+            
+            ansformed_frame = transform.transform_frame(x['driving'])
 
             transformed_he_driving = self.he_estimator(transformed_frame)
 
@@ -1246,7 +1248,7 @@ class DiscriminatorFullModel(torch.nn.Module):
         return loss_values
 
 
-class ExpTransformerTrainer(GeneratorFullModel):
+class ExpTransformerTrainer(GeneratorFullModelWithSeg):
     def __init__(self, stage, exp_transformer, kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=True):
         super(ExpTransformerTrainer, self).__init__(kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=estimate_jacobian)
         self.eval()
@@ -1254,18 +1256,22 @@ class ExpTransformerTrainer(GeneratorFullModel):
             p.requires_grad = False
         self.exp_transformer = exp_transformer
         self.stage = 1
+        
+        exp_transformer.train()
+        discriminator.train()
+        for p in discriminator.parameters():
+            p.requires_grad = True
 
-
-
+        self.sections = train_params['sections']
+        self.split_ids = [sec[1] for sec in self.sections]
+            
     def forward(self, x):
         kp_source = x['source_mesh']
         kp_driving = x['driving_mesh']
         
-        tf_output = self.exp_transformer(x['source'])
+        tf_output = self.exp_transformer(x['source'], x['driving'])
         src_exp = tf_output['src_exp']
         drv_exp = tf_output['drv_exp']
-
-        exp_driving = self.exp_transformer(x['driving'])
 
         kp_source['exp'] = src_exp
         kp_driving['exp'] = drv_exp
@@ -1419,7 +1425,7 @@ class ExpTransformerTrainer(GeneratorFullModel):
             ## Value loss part
             if self.loss_weights['equivariance_value'] != 0:
                 # project 3d -> 2d
-                kp_driving_2d = kp_driving['value'][:, :, :2]
+                kp_driving_2d = kp_driving['prior'][:, :, :2]
                 transformed_kp_2d = transformed_kp['value'][:, :, :2]
                 value = torch.abs(kp_driving_2d - transform.warp_coordinates(transformed_kp_2d)).mean()
                 loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value

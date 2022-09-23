@@ -18,16 +18,21 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     train_params = config['train_params']
 
     optimizer = torch.optim.Adam(exp_transformer.parameters(), lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
 
     Logger.load_cpk(checkpoint_ref, generator, discriminator)
 
     if checkpoint is not None:
-        start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer)
+        start_epoch = Logger.load_cpk(checkpoint, discriminator=discriminator, exp_transformer=exp_transformer, optimizer_exp_transformer=optimizer, optimizer_discriminator=optimizer_discriminator)
     else:
         start_epoch = 0
 
+    # print(f'start epoch: {start_epoch}')
     scheduler = MultiStepLR(optimizer, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
+    scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
+                                      last_epoch=start_epoch - 1)
+
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
 
@@ -80,9 +85,13 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 logger.log_iter(losses=losses)
 
             scheduler.step()
+            scheduler_discriminator.step()
             cache_log = f'cache hit ratio : {num_cache_hit / num_item_call * 100:.2f} %'
             print(cache_log)
-            logger.log_epoch(epoch, {'exp_transformer': exp_transformer}, inp=x, out=generated)
+            logger.log_epoch(epoch, {'exp_transformer': exp_transformer, 
+            'discriminator': discriminator,
+            'optimizer_exp_transformer': optimizer,
+            'optimizer_discriminator': optimizer_discriminator}, inp=x, out=generated)
 
 def train_baseline(config, generator, discriminator, kp_detector, he_estimator, checkpoint, log_dir, dataset, device_ids, checkpoint_ref=None, he_estimator_ref=None):
     train_params = config['train_params']

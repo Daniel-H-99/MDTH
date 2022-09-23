@@ -242,7 +242,6 @@ class LandmarkModel():
 
     def get_landmarks_fa(self, frame):
         frame = frame[:, :, :3]
-        print(f'frame shape: {frame.shape}')
         H, W = frame.shape[0:2]
         bb = (0, 0, H - 1, W - 1)
         if max(H, W) > 640:

@@ -113,13 +113,13 @@ class ImageEncoder(nn.Module):
         for i in range(5):
             self.block5.add_module('b5_'+ str(i), ResBottleneck(in_features=1024, stride=1))
 
-        self.conv5 = nn.Conv2d(in_channels=1024, out_channels=2048, kernel_size=1)
-        self.norm5 = BatchNorm2d(2048, affine=True)
-        self.block6 = ResBottleneck(in_features=2048, stride=2)
+        # self.conv5 = nn.Conv2d(in_channels=1024, out_channels=2048, kernel_size=1)
+        # self.norm5 = BatchNorm2d(2048, affine=True)
+        # self.block6 = ResBottleneck(in_features=2048, stride=2)
 
-        self.block7 = nn.Sequential()
-        for i in range(2):
-            self.block7.add_module('b7_'+ str(i), ResBottleneck(in_features=2048, stride=1))
+        # self.block7 = nn.Sequential()
+        # for i in range(2):
+        #     self.block7.add_module('b7_'+ str(i), ResBottleneck(in_features=2048, stride=1))
 
 
     def forward(self, x):
@@ -148,12 +148,12 @@ class ImageEncoder(nn.Module):
 
         out = self.block5(out)
 
-        out = self.conv5(out)
-        out = self.norm5(out)
-        out = F.relu(out)
-        out = self.block6(out)
+        # out = self.conv5(out)
+        # out = self.norm5(out)
+        # out = F.relu(out)
+        # out = self.block6(out)
 
-        out = self.block7(out)
+        # out = self.block7(out)
 
         out = F.adaptive_avg_pool2d(out, 1)
         out = out.view(out.shape[0], -1)
@@ -179,14 +179,13 @@ class ExpTransformer(nn.Module):
         # self.exp_proj = nn.Linear(1024, 512)
         # self.id_proj = nn.Linear(1024, 512)
 
-        self.fc_id = nn.Sequential(
-            nn.Linear(1024, 3*num_kp),
-            nn.Tanh()
-        )
+        # self.fc_id = nn.Sequential(
+        #     nn.Linear(1024, 3*num_kp),
+        #     nn.Tanh()
+        # )
 
         self.fc_exp = nn.Sequential(
             nn.Linear(1024, 3*num_kp),
-            nn.Tanh()
         )
 
         self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
@@ -194,9 +193,9 @@ class ExpTransformer(nn.Module):
         # latent_dim = 2048
 
     def split_embedding(self, img_embedding):
-        id_embedding, style_embedding, exp_embedding = img_embedding.split([1024, 512, 512])
+        style_embedding, exp_embedding = img_embedding.split([512, 512], dim=1)
         
-        return {'id': id_embedding, 'style': style_embedding, 'exp': exp_embedding}
+        return {'style': style_embedding, 'exp': exp_embedding}
 
     def fuse(self, style, exp):
         input = torch.cat([style, exp], dim=1)
@@ -212,17 +211,17 @@ class ExpTransformer(nn.Module):
         if 'id' in embedding:
             res['id'] = self.fc_id(embedding['id']).view(len(embedding['id']), -1, 3)
         if 'style' in embedding and 'exp' in embedding:
-            res['exp'] = self.fc_exp(self.fuse(embedding['style'], embedding['exp']))
+            res['exp'] = self.fc_exp(self.fuse(embedding['style'], embedding['exp'])).view(len(embedding['style']), -1, 3)
         return res
 
     def forward(self, src, drv):
         src_embedding = self.encode(src)
         drv_embedding = self.encode(drv)
 
-        src_ouput = self.decode(src_embedding)
+        src_output = self.decode(src_embedding)
         drv_output = self.decode({'style': src_embedding['style'], 'exp': drv_embedding['exp']})
     
-        return {'id': src_ouput['id'], 'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding}
+        return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding}
 
 class HEEstimator(nn.Module):
     """

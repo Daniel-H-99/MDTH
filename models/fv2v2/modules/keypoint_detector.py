@@ -166,14 +166,15 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=64, num_classes=128, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=64, num_classes=128, tau=1.0, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_layer = num_layer
         self.num_heads = num_heads
         self.num_classes = num_classes
 
         self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
-
+        self.tau = tau
+        
         # self.fc_roll = nn.Linear(2048, num_bins)
         # self.fc_pitch = nn.Linear(2048, num_bins)
         # self.fc_yaw = nn.Linear(2048, num_bins)
@@ -188,7 +189,7 @@ class ExpTransformer(nn.Module):
         #     nn.Tanh()
         # )
 
-        self.vq_exp = CategoricalEncodingLayer(512, self.num_heads, self.num_classes)
+        self.vq_exp = CategoricalEncodingLayer(512, self.num_heads, self.num_classes, tau=self.tau)
         self.codebook = nn.Linear(self.num_heads * self.num_classes, 512)
         self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
         self.fc_exp = nn.Sequential(

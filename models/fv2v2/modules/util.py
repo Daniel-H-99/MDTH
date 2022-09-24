@@ -10,6 +10,7 @@ import torch.nn.utils.spectral_norm as spectral_norm
 import re
 
 
+
 def kp2gaussian(kp, spatial_size, kp_variance):
     """
     Transform a keypoint into gaussian like representation
@@ -70,6 +71,22 @@ def make_coordinate_grid(spatial_size, type):
 
     return meshed
 
+
+class CategoricalEncodingLayer(nn.Module):
+    def __init__(self, in_dim, num_heads, num_classes):
+        super(CategoricalEncodingLayer, self).__init__()
+        self.in_dim = in_dim
+        self.num_heads = num_heads
+        self.num_classes = num_classes
+        self.layer = nn.Linear(self.in_dim, self.num_heads * self.num_classes)
+
+    def forward(self, x):
+        # x: B x in_dim
+        x = self.layer(x)
+        x = x.view(-1, self.num_heads, self.num_classes)
+        x = F.log_softmax(x, dim=-1)
+        x = F.gumbel_softmax(x, hard=True)
+        return x
 
 class conv_tsa(nn.Module):
     def __init__(self, orig_conv):

@@ -17,6 +17,8 @@ from modules.keypoint_detector import KPDetector, HEEstimator, ExpTransformer
 import torch
 
 from train import train_transformer
+import warnings
+warnings.filterwarnings('ignore')
 
 if __name__ == "__main__":
     

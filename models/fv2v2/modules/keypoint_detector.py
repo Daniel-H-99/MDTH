@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, CategoricalEncodingLayer
 
 
 class KPDetector(nn.Module):
@@ -160,14 +160,18 @@ class ImageEncoder(nn.Module):
 
         return out
 
+
 class ExpTransformer(nn.Module):
     """
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=64, num_classes=128, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_layer = num_layer
+        self.num_heads = num_heads
+        self.num_classes = num_classes
+
         self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
 
         # self.fc_roll = nn.Linear(2048, num_bins)
@@ -184,16 +188,22 @@ class ExpTransformer(nn.Module):
         #     nn.Tanh()
         # )
 
+        self.vq_exp = CategoricalEncodingLayer(512, self.num_heads, self.num_classes)
+        self.codebook = nn.Linear(self.num_heads * self.num_classes, 512)
+        self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
         self.fc_exp = nn.Sequential(
             nn.Linear(1024, 3*num_kp),
         )
 
-        self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
+
 
         # latent_dim = 2048
 
     def split_embedding(self, img_embedding):
         style_embedding, exp_embedding = img_embedding.split([512, 512], dim=1)
+        exp_embedding = self.vq_exp(exp_embedding)
+        exp_embedding = exp_embedding.flatten(1)
+        exp_embedding = self.codebook(exp_embedding)
         
         return {'style': style_embedding, 'exp': exp_embedding}
 

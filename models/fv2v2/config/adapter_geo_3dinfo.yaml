@@ -62,7 +62,7 @@ model_params:
     sn: True
 
 train_params:
-  num_epochs: 300
+  num_epochs: 600
   num_repeats: 1
   epoch_milestones: [180,]
   lr_generator: 2.0e-4

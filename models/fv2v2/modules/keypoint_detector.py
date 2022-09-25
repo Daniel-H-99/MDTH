@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, MeshEncoder
 
 
 class KPDetector(nn.Module):
@@ -165,10 +165,13 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_layer = num_layer
-        self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
+        self.num_kp = num_kp
+        self.latent_dim = latent_dim
+        self.encoder = MeshEncoder(latent_dim=self.latent_dim, num_kp=self.num_kp)
+        # self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
 
         # self.fc_roll = nn.Linear(2048, num_bins)
         # self.fc_pitch = nn.Linear(2048, num_bins)
@@ -185,15 +188,15 @@ class ExpTransformer(nn.Module):
         # )
 
         self.fc_exp = nn.Sequential(
-            nn.Linear(1024, 3*num_kp),
+            nn.Linear(self.latent_dim, 3*num_kp),
         )
 
-        self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
+        self.exp_encoder = Resnet1DEncoder(self.num_layer, self.latent_dim, self.latent_dim)
 
         # latent_dim = 2048
 
     def split_embedding(self, img_embedding):
-        style_embedding, exp_embedding = img_embedding.split([512, 512], dim=1)
+        style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
         
         return {'style': style_embedding, 'exp': exp_embedding}
 

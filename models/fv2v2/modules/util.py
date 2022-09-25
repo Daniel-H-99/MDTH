@@ -70,6 +70,47 @@ def make_coordinate_grid(spatial_size, type):
 
     return meshed
 
+class MeshEncoder(nn.Module):
+    def __init__(self, latent_dim: int = 128, n_vertices: int = 68, num_kp: int = 478, mean=None, stddev=None):
+        """
+        :param latent_dim: size of the latent expression embedding before quantization through Gumbel softmax
+        :param n_vertices: number of face mesh vertices
+        :param mean: mean position of each vertex
+        :param stddev: standard deviation of each vertex position
+        :param model_name: name of the model, used to load and save the model
+        """
+        super(MeshEncoder, self).__init__()
+
+        self.n_vertices = n_vertices
+        self.num_kp = num_kp
+        self.latent_dim = latent_dim
+
+        shape = (1, self.n_vertices, 3)
+        self.register_buffer("mean", torch.zeros(shape) if mean is None else mean.view(shape))
+        self.register_buffer("stddev", torch.ones(shape) if stddev is None else stddev.view(shape))
+
+        self.layers = torch.nn.ModuleList([
+            torch.nn.Linear(self.n_vertices * 3, 256),
+            torch.nn.Linear(256, self.latent_dim),
+        ])
+
+        self.code = torch.nn.Linear(self.latent_dim, self.latent_dim)
+
+    def forward(self, geom):
+        """
+        :param geom: B x n_vertices x 3 Tensor containing face geometries
+        :return: code: B x latent_dim Tensor containing a latent expression code/embedding
+        """
+        x = (geom - self.mean) / self.stddev
+        x = x.view(x.shape[0], self.n_vertices*3)
+
+        for layer in self.layers:
+            x = F.leaky_relu(layer(x), 0.2)
+
+        x = self.code(x)
+
+        return x
+
 
 class conv_tsa(nn.Module):
     def __init__(self, orig_conv):

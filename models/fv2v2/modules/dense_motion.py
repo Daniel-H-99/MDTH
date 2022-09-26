@@ -179,13 +179,12 @@ class DenseMotionNetworkGeo(nn.Module):
     def extract_rotation_keypoints(self, kp_source, kp_driving):
         device = kp_source['value'].device
         coords_src = self.extract_prior(kp_source)
-        coords_drv = self.extract_prior(kp_driving)
+        # coords_drv = self.extract_prior(kp_driving)
         
         src_normed = coords_src
-        drv_normed = coords_drv
+        # drv_normed = coords_drv
 
-        if 'exp' in kp_source and 'exp' in kp_driving:
-            drv_normed = src_normed - kp_source['exp'] + kp_driving['exp']
+        drv_normed = src_normed - kp_source['exp'] + kp_driving['exp']
 
 
         tmp = torch.cat([src_normed, torch.ones(src_normed.shape[0], src_normed.shape[1], 1).to(device) / kp_source['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4

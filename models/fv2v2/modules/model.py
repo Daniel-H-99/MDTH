@@ -1255,7 +1255,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         for p in self.parameters():
             p.requires_grad = False
         self.exp_transformer = exp_transformer
-        self.stage = 1
+        self.stage = stage
         
         exp_transformer.train()
         discriminator.train()
@@ -1265,6 +1265,21 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         self.sections = train_params['sections']
         self.split_ids = [sec[1] for sec in self.sections]
     
+    def cycle(self, x, bs):
+        if type(x) == dict:
+            res = {}
+            for k in list(x.keys()):
+                res[k] = self.cycle(x[k], bs)
+            return res
+        elif type(x) == list:
+            res = []
+            for item in x:
+                res.append(self.cycle(item, bs))
+        elif type(x) == torch.Tensor:
+            assert len(x) == bs
+            return x[list(range(1, bs)) + [0]]
+        else:
+            return x
     def forward(self, x):
         if self.stage == 1:
             kp_source = x['source_mesh']
@@ -1496,57 +1511,35 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
         if self.stage == 2:
+            loss_values = {}
+
             bs = len(x['source'])
             kp_source = x['source_mesh']
             kp_driving = x['driving_mesh']
+            
+            kp_cycled_source = self.cycle(kp_source, bs)
+            cycled_source = self.cycle(x['source'], bs)
+            
+            cycled_tf_output = self.exp_transformer(cycled_source, x['driving'])
+            cycled_src_exp = cycled_tf_output['src_exp']
+            drv_exp = cycled_tf_output['drv_exp']
 
-
-            tf_output = self.exp_transformer(x['source'], x['driving'])
-            src_exp = tf_output['src_exp']
-            drv_exp = tf_output['drv_exp']
-
-            kp_source['exp'] = src_exp
+            kp_cycled_source['exp'] = cycled_src_exp
             kp_driving['exp'] = drv_exp
 
-            # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
-            # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
-
-            
-            # driving_224 = x['hopenet_driving']
-            # yaw_gt, pitch_gt, roll_gt = self.hopenet(driving_224)
-
-            # reg = self.regularize(kp_canonical_source, kp_canonical_driving) # regularizor loss
-
-            loss_values = {}
-            
-            bs = len(x['source_mesh']['value'])
-            
-            # x_reg = kp_canonical['value'].flatten(1)
-            # for x_i in x_reg:
-            #     self.pca_x.register(x_i.detach().cpu())
-            # if self.pca_x.steps > 2:
-            #     mu_x, u_x, s_x = self.pca_x.get_state(device='cuda')
-            #     loss_reg = ((x_reg - mu_x[None]).unsqueeze(1) @ ((u_x @ (s_x ** 2) @ u_x.t())[None] + self.sigma_err[None]).inverse() @ (x_reg - mu_x[None]).unsqueeze(2)).mean() # 1
-            #     loss['regularizor'] = self.loss_weights['regularizor'] * loss_reg
-            #     self.mu_x, self.u_x, self.s_x = self.pca_x.get_state()
-            # else:
-            #     loss['regularizor'] = self.loss_weights['regularizor'] * torch.zeros(1).cuda().mean()
-
-            # if self.pca_x.steps * self.pca_e.steps > 0:
-            #     kp_source, kp_driving = reg['kp_source'], reg['kp_driving']
-            #     loss = {k: self.loss_weights[k] * v for k, v in reg['loss'].items()}
-            # else:
-            #     kp_source, kp_driving = kp_canonical_source, kp_canonical_driving
-            #     loss = {k: self.loss_weights[k] * torch.zeros(1).cuda() for k, v in reg['loss'].items()}
-
-
-            # {'value': value, 'jacobian': jacobian}
-            # kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
-            # kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
-
-            
             # print('entering generator')
-            generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
+            cycled_generated = self.generator(cycled_source, kp_source=kp_cycled_source, kp_driving=kp_driving)
+            cycled_driving = cycled_generated['prediction']
+
+            tf_output = self.exp_transformer(x['source'], cycled_driving)
+            src_exp = tf_output['src_exp']
+            cycled_drv_exp = tf_output['drv_exp']
+
+            kp_source['exp'] = src_exp
+            kp_cycled_driving = {'U': kp_driving['U'], 'scale': kp_driving['scale'], 'exp': cycled_drv_exp}
+
+            # print('entering generator')
+            generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_cycled_driving)
 
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])

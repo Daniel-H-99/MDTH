@@ -1,7 +1,7 @@
 from torch import nn
 import torch
 import torch.nn.functional as F
-
+import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, MeshEncoder, BiCategoricalEncodingLayer
 
@@ -165,7 +165,7 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_heads = num_heads
         self.code_dim = code_dim

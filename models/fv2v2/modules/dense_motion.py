@@ -230,9 +230,9 @@ class DenseMotionNetworkGeo(nn.Module):
         heatmap = self.create_heatmap_representations(deformed_feature, kp_driving, kp_source)
         out_dict['heatmap'] = heatmap
 
-        print(f'heatmap shape: {heatmap.shape}')
-        print(f'deformed_feature shape: {deformed_feature.shape}')
-        print(f'sparse motion shape: {sparse_motion.shape}')
+        # print(f'heatmap shape: {heatmap.shape}')
+        # print(f'deformed_feature shape: {deformed_feature.shape}')
+        # print(f'sparse motion shape: {sparse_motion.shape}')
         
         input = torch.cat([heatmap, deformed_feature], dim=2)
         input = input.view(bs, -1, d, h, w)

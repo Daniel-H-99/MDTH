@@ -1,9 +1,10 @@
 from torch import nn
 import torch
 import torch.nn.functional as F
+import torch.nn.init as init
 
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, CategoricalEncodingLayer
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, BiCategoricalEncodingLayer
 
 
 class KPDetector(nn.Module):
@@ -166,12 +167,11 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=64, num_classes=128, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_layer = num_layer
         self.num_heads = num_heads
-        self.num_classes = num_classes
-
+        self.code_dim = code_dim
         self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
 
         # self.fc_roll = nn.Linear(2048, num_bins)
@@ -188,22 +188,28 @@ class ExpTransformer(nn.Module):
         #     nn.Tanh()
         # )
 
-        self.vq_exp = CategoricalEncodingLayer(512, self.num_heads, self.num_classes)
-        self.codebook = nn.Linear(self.num_heads * self.num_classes, 512)
-        self.exp_encoder = Resnet1DEncoder(self.num_layer, 512 * 2, 1024)
+        self.vq_exp = BiCategoricalEncodingLayer(512, self.num_heads)
+        self.codebook = nn.Parameter(torch.zeros(self.num_heads, self.code_dim).requires_grad_(True))
+        self.exp_encoder = nn.Sequential(
+            nn.Linear(512 + self.num_heads * self.code_dim, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 512)
+        )
         self.fc_exp = nn.Sequential(
-            nn.Linear(1024, 3*num_kp),
+            nn.Linear(512, 3*num_kp),
         )
 
 
-
+        init.kaiming_uniform_(self.codebook)
         # latent_dim = 2048
 
     def split_embedding(self, img_embedding):
         style_embedding, exp_embedding = img_embedding.split([512, 512], dim=1)
-        exp_embedding = self.vq_exp(exp_embedding)
+        exp_embedding = self.vq_exp(exp_embedding)  # B x num_heads
+        exp_embedding = torch.einsum('bk,kp->bkp', exp_embedding, F.normalize(self.codebook))
         exp_embedding = exp_embedding.flatten(1)
-        exp_embedding = self.codebook(exp_embedding)
         
         return {'style': style_embedding, 'exp': exp_embedding}
 
@@ -221,7 +227,7 @@ class ExpTransformer(nn.Module):
         if 'id' in embedding:
             res['id'] = self.fc_id(embedding['id']).view(len(embedding['id']), -1, 3)
         if 'style' in embedding and 'exp' in embedding:
-            res['exp'] = self.fc_exp(self.fuse(embedding['style'], embedding['exp'])).view(len(embedding['style']), -1, 3)
+            res['exp'] = self.fc_exp(F.leaky_relu(self.fuse(embedding['style'], embedding['exp']), 0.2)).view(len(embedding['style']), -1, 3)
         return res
 
     def forward(self, src, drv):

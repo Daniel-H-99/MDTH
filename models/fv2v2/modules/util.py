@@ -71,6 +71,20 @@ def make_coordinate_grid(spatial_size, type):
 
     return meshed
 
+class BiCategoricalEncodingLayer(nn.Module):
+    def __init__(self, in_dim, num_heads):
+        super(BiCategoricalEncodingLayer, self).__init__()
+        self.in_dim = in_dim
+        self.num_heads = num_heads
+        self.layer = nn.Linear(self.in_dim, self.num_heads)
+
+    def forward(self, x):
+        # x: B x in_dim
+        x = self.layer(x)
+        x = F.sigmoid(x)
+        x = 2 * x - 1
+        return x
+
 
 class CategoricalEncodingLayer(nn.Module):
     def __init__(self, in_dim, num_heads, num_classes):

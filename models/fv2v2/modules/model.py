@@ -1320,6 +1320,11 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         pyramide_generated = self.pyramid(generated['prediction'])
 
 
+        if self.loss_weights['teacher'] != 0:
+            drv_normed_GT = kp_driving['prior_GT']
+            drv_normed = kp_driving['prior']
+            loss_values['teacher'] = self.loss_weights['teacher'] * F.mse_loss(drv_normed, drv_normed_GT)
+
         if self.loss_weights['motion_match'] != 0:
             motion = generated['deformation'] # B x d x h x w x 3
             motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w

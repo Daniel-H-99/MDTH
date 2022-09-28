@@ -185,6 +185,7 @@ class DenseMotionNetworkGeo(nn.Module):
         drv_normed = coords_drv
 
         if 'exp' in kp_source and 'exp' in kp_driving:
+            drv_normed_GT = drv_normed
             drv_normed = src_normed - kp_source['exp'] + kp_driving['exp']
 
 
@@ -198,7 +199,7 @@ class DenseMotionNetworkGeo(nn.Module):
         tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
         coords_drv = tmp # B x N x 3
 
-        return {'src': coords_src, 'drv': coords_drv, 'src_normed': src_normed, 'drv_normed': drv_normed}         
+        return {'src': coords_src, 'drv': coords_drv, 'src_normed': src_normed, 'drv_normed': drv_normed, 'drv_normed_GT': drv_normed_GT}         
         
 
     def forward(self, feature, kp_driving, kp_source):
@@ -218,7 +219,8 @@ class DenseMotionNetworkGeo(nn.Module):
         
         kp_source['prior'] = rotation_kps['src_normed']
         kp_driving['prior'] = rotation_kps['drv_normed']
-    
+        kp_driving['prior_GT'] = rotation_kps['drv_normed_GT']
+        
         out_dict['kp_source'] = {'value': kp_source['kp']}
         out_dict['kp_driving'] = {'value': kp_driving['kp']}
         

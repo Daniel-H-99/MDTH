@@ -39,6 +39,8 @@ model_params:
     max_features: 2048
     num_bins: 66
     num_layer: 1
+    num_heads: 32
+    code_dim: 8
   generator_params:
     block_expansion: 64
     max_features: 512
@@ -90,6 +92,7 @@ train_params:
     headpose: 0
     motion_match: 50
     expression: 0
+    teacher: 0
     localized: [1, 1, 1, 1, 1, 1, 0, 10, 10]
 
 visualizer_params:

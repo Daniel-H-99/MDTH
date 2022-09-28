@@ -210,7 +210,9 @@ class ExpTransformer(nn.Module):
 
     def split_embedding(self, img_embedding):
         style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
-        
+        exp_embedding = self.vq_exp(exp_embedding)
+        exp_embedding = exp_embedding.flatten(1)
+        exp_embedding = self.codebook(exp_embedding)
         return {'style': style_embedding, 'exp': exp_embedding}
 
     def fuse(self, style, exp):

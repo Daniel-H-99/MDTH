@@ -165,9 +165,10 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
-        self.num_layer = num_layer
+        self.num_heads = num_heads
+        self.code_dim = code_dim
         self.num_kp = num_kp
         self.latent_dim = latent_dim
         self.encoder = MeshEncoder(latent_dim=self.latent_dim, num_kp=self.num_kp)
@@ -187,12 +188,24 @@ class ExpTransformer(nn.Module):
         #     nn.Tanh()
         # )
 
+
+
+        self.vq_exp = BiCategoricalEncodingLayer(self.latent_dim // 2, self.num_heads)
+        self.codebook = nn.Parameter(torch.zeros(self.num_heads, self.code_dim).requires_grad_(True))
+        self.exp_encoder = nn.Sequential(
+            nn.Linear(self.latent_dim // 2 + self.num_heads * self.code_dim, self.latent_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(self.latent_dim, self.latent_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(self.latent_dim, self.latent_dim)
+        )
+ 
         self.fc_exp = nn.Sequential(
             nn.Linear(self.latent_dim, 3*num_kp),
         )
 
-        self.exp_encoder = Resnet1DEncoder(self.num_layer, self.latent_dim, self.latent_dim)
-
+        init.kaiming_uniform_(self.codebook)
+        
         # latent_dim = 2048
 
     def split_embedding(self, img_embedding):

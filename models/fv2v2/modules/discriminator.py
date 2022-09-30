@@ -38,7 +38,7 @@ class Discriminator(nn.Module):
     Discriminator similar to Pix2Pix
     """
 
-    def __init__(self, num_channels=3, block_expansion=64, num_blocks=4, max_features=512,
+    def __init__(self, num_channels=4, block_expansion=64, num_blocks=4, max_features=512,
                  sn=False, **kwargs):
         super(Discriminator, self).__init__()
 

@@ -199,7 +199,7 @@ def tf_keypoint_transformation(kp_canonical, tf_kp_canonical, he):
     yaw, pitch, roll = torch.tensor(he['yaw']), torch.tensor(he['pitch']), torch.tensor(he['roll'])
     t, exp = torch.tensor(he['t']), torch.tensor(he['exp'])
     exp = tf_kp_canonical['exp'].view(len(kp), -1, 3)
-    kp = kp + exp
+    # kp = kp + exp
 
     yaw = headpose_pred_to_degree(yaw)
     pitch = headpose_pred_to_degree(pitch)
@@ -211,10 +211,10 @@ def tf_keypoint_transformation(kp_canonical, tf_kp_canonical, he):
     kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
 
     # keypoint translation
-    t = t.unsqueeze_(1).repeat(1, kp.shape[1], 1)
+    t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
     kp_t = kp_rotated + t
 
-    kp_transformed = kp_t
+    kp_transformed = kp_t + exp
 
     return {'value': kp_transformed}
 
@@ -755,7 +755,6 @@ class ExpTransformerTrainer(GeneratorFullModel):
         for p in self.parameters():
             p.requires_grad = False
         self.exp_transformer = exp_transformer
-        self.eval()
         self.stage = 1
 
     def forward(self, x):
@@ -814,6 +813,92 @@ class ExpTransformerTrainer(GeneratorFullModel):
                         value = torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
                         value_total += self.loss_weights['perceptual'][i] * value
                 loss_values['perceptual'] = value_total
+
+            if self.loss_weights['generator_gan'] != 0:
+                discriminator_maps_generated = self.discriminator(pyramide_generated)
+                discriminator_maps_real = self.discriminator(pyramide_real)
+                value_total = 0
+                for scale in self.disc_scales:
+                    key = 'prediction_map_%s' % scale
+                    if self.train_params['gan_mode'] == 'hinge':
+                        value = -torch.mean(discriminator_maps_generated[key])
+                    elif self.train_params['gan_mode'] == 'ls':
+                        value = ((1 - discriminator_maps_generated[key]) ** 2).mean()
+                    else:
+                        raise ValueError('Unexpected gan_mode {}'.format(self.train_params['gan_mode']))
+
+                    value_total += self.loss_weights['generator_gan'] * value
+                loss_values['gen_gan'] = value_total
+
+                if sum(self.loss_weights['feature_matching']) != 0:
+                    value_total = 0
+                    for scale in self.disc_scales:
+                        key = 'feature_maps_%s' % scale
+                        for i, (a, b) in enumerate(zip(discriminator_maps_real[key], discriminator_maps_generated[key])):
+                            if self.loss_weights['feature_matching'][i] == 0:
+                                continue
+                            value = torch.abs(a - b).mean()
+                            value_total += self.loss_weights['feature_matching'][i] * value
+                        loss_values['feature_matching'] = value_total
+
+
+            if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
+                transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
+                transformed_frame = transform.transform_frame(x['driving'])
+
+                transformed_hie_driving = self.exp_transformer(x['source'], transformed_frame)
+
+                transformed_kp = tf_keypoint_transformation(kp_canonical, transformed_hie_driving, he_driving)
+
+                generated['transformed_frame'] = transformed_frame
+                generated['transformed_kp'] = transformed_kp
+
+                ## Value loss part
+                if self.loss_weights['equivariance_value'] != 0:
+                    # project 3d -> 2d
+                    kp_driving_2d = kp_driving['value'][:, :, :2]
+                    transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                    value = torch.abs(kp_driving_2d - transform.warp_coordinates(transformed_kp_2d)).mean()
+                    loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value
+
+                ## jacobian loss part
+                if self.loss_weights['equivariance_jacobian'] != 0:
+                    # project 3d -> 2d
+                    transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                    transformed_jacobian_2d = transformed_kp['jacobian'][:, :, :2, :2]
+                    jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp_2d),
+                                                        transformed_jacobian_2d)
+                    
+                    jacobian_2d = kp_driving['jacobian'][:, :, :2, :2]
+                    normed_driving = torch.inverse(jacobian_2d)
+                    normed_transformed = jacobian_transformed
+                    value = torch.matmul(normed_driving, normed_transformed)
+
+                    eye = torch.eye(2).view(1, 1, 2, 2).type(value.type())
+
+                    value = torch.abs(eye - value).mean()
+                    loss_values['equivariance_jacobian'] = self.loss_weights['equivariance_jacobian'] * value
+
+            if self.loss_weights['keypoint'] != 0:
+                # print(kp_driving['value'].shape)     # (bs, k, 3)
+                value_total = 0
+                for i in range(kp_driving['value'].shape[1]):
+                    for j in range(kp_driving['value'].shape[1]):
+                        dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
+                        dist = 0.1 - dist      # set Dt = 0.1
+                        dd = torch.gt(dist, 0) 
+                        value = (dist * dd).mean()
+                        value_total += value
+
+                kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
+                value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
+
+                value_total += value_depth
+                loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
+
+            if self.loss_weights['expression'] != 0:
+                value = torch.norm(tf_kp_canonical['exp'], p=1, dim=-1).mean()
+                loss_values['expression'] = self.loss_weights['expression'] * value
 
         elif self.stage == 2:
             generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)

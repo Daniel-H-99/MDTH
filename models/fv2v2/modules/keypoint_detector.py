@@ -211,10 +211,15 @@ class ExpTransformer(nn.Module):
     def split_embedding(self, img_embedding):
         style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
         exp_embedding = self.vq_exp(exp_embedding)  # B x num_heads
-        exp_embedding = torch.einsum('bk,kp->bkp', exp_embedding, F.normalize(self.codebook))
-        exp_embedding = exp_embedding.flatten(1)
-        
+        exp_embedding = self.decode_exp_code(exp_embedding)
+
         return {'style': style_embedding, 'exp': exp_embedding}
+
+    def decode_exp_code(self, exp_code):
+        # B x num_heads: [-1, 1] codes
+        exp_embedding = torch.einsum('bk,kp->bkp', exp_code, F.normalize(self.codebook))
+        exp_embedding = exp_embedding.flatten(1)
+        return exp_embedding
 
     def fuse(self, style, exp):
         input = torch.cat([style, exp], dim=1)

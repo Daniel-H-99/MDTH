@@ -1523,8 +1523,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             ## random expression drive
             src_style = tf_output['src_embedding']['style']
             src_exp_code = tf_output['src_embedding']['exp']
-            src_exp_code_random = 2 * torch.rand(src_exp_code.shape).to(src_exp_code.device) - 1
-            src_exp_code_random_decoded = self.decode_exp_code(src_exp_code_random)
+            src_exp_code_random = 2 * torch.rand(bs, self.exp_transformer.num_heads).to(src_exp_code.device) - 1
+            src_exp_code_random_decoded = self.exp_transformer.decode_exp_code(src_exp_code_random)
             random_embedding = {'style': src_style, 'exp': src_exp_code_random_decoded}
             src_exp_random = self.exp_transformer.decode(random_embedding)['exp']
             kp_source_random = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_random}
@@ -1536,7 +1536,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 scaled_driven = self.id_classifier_scaler(generated_random['prediction'])
                 id_src = self.id_classifier(scaled_source)
                 id_drvn = self.id_classifier(scaled_driven)
-                loss_value['id_cls'] = self.loss_weights['id_cls'] * torch.abs(id_drvn - id_src.detach()).mean()
+                loss_values['id_cls'] = self.loss_weights['id_cls'] * torch.abs(id_drvn - id_src.detach()).mean()
 
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3

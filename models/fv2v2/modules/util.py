@@ -9,12 +9,49 @@ from sync_batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
 import torch.nn.utils.spectral_norm as spectral_norm
 import re
 
+def get_rotation_matrix(yaw, pitch, roll):
+    yaw = yaw / 180 * 3.14
+    pitch = pitch / 180 * 3.14
+    roll = roll / 180 * 3.14
+
+    roll = roll.unsqueeze(1)
+    pitch = pitch.unsqueeze(1)
+    yaw = yaw.unsqueeze(1)
+
+    pitch_mat = torch.cat([torch.ones_like(pitch), torch.zeros_like(pitch), torch.zeros_like(pitch), 
+                          torch.zeros_like(pitch), torch.cos(pitch), -torch.sin(pitch),
+                          torch.zeros_like(pitch), torch.sin(pitch), torch.cos(pitch)], dim=1)
+    pitch_mat = pitch_mat.view(pitch_mat.shape[0], 3, 3)
+
+    yaw_mat = torch.cat([torch.cos(yaw), torch.zeros_like(yaw), torch.sin(yaw), 
+                           torch.zeros_like(yaw), torch.ones_like(yaw), torch.zeros_like(yaw),
+                           -torch.sin(yaw), torch.zeros_like(yaw), torch.cos(yaw)], dim=1)
+    yaw_mat = yaw_mat.view(yaw_mat.shape[0], 3, 3)
+
+    roll_mat = torch.cat([torch.cos(roll), -torch.sin(roll), torch.zeros_like(roll),  
+                         torch.sin(roll), torch.cos(roll), torch.zeros_like(roll),
+                         torch.zeros_like(roll), torch.zeros_like(roll), torch.ones_like(roll)], dim=1)
+    roll_mat = roll_mat.view(roll_mat.shape[0], 3, 3)
+
+    rot_mat = torch.einsum('bij,bjk,bkm->bim', pitch_mat.inverse(), yaw_mat.inverse(), roll_mat.inverse())
+
+    return rot_mat
+
+def headpose_pred_to_degree(pred):
+    device = pred.device
+    idx_tensor = [idx for idx in range(66)]
+    idx_tensor = torch.FloatTensor(idx_tensor).to(device)
+    pred = F.softmax(pred)
+    degree = torch.sum(pred*idx_tensor, axis=1) * 3 - 99
+
+    return degree
+
 
 def kp2gaussian(kp, spatial_size, kp_variance):
     """
     Transform a keypoint into gaussian like representation
     """
-    mean = kp['value']
+    mean = kp['kp']
 
     coordinate_grid = make_coordinate_grid(spatial_size, mean.type())
     number_of_leading_dimensions = len(mean.shape) - 1
@@ -70,6 +107,155 @@ def make_coordinate_grid(spatial_size, type):
 
     return meshed
 
+class BiCategoricalEncodingLayer(nn.Module):
+    def __init__(self, in_dim, num_heads):
+        super(BiCategoricalEncodingLayer, self).__init__()
+        self.in_dim = in_dim
+        self.num_heads = num_heads
+        self.layer = nn.Linear(self.in_dim, self.num_heads)
+
+    def forward(self, x):
+        # x: B x in_dim
+        x = self.layer(x)
+        x = F.sigmoid(x)
+        x = 2 * x - 1
+        return x
+
+
+class MeshEncoder(nn.Module):
+    def __init__(self, latent_dim: int = 128, n_vertices: int = 68, num_kp: int = 478, mean=None, stddev=None):
+        """
+        :param latent_dim: size of the latent expression embedding before quantization through Gumbel softmax
+        :param n_vertices: number of face mesh vertices
+        :param mean: mean position of each vertex
+        :param stddev: standard deviation of each vertex position
+        :param model_name: name of the model, used to load and save the model
+        """
+        super(MeshEncoder, self).__init__()
+
+        self.n_vertices = n_vertices
+        self.num_kp = num_kp
+        self.latent_dim = latent_dim
+
+        shape = (1, self.n_vertices, 3)
+        self.register_buffer("mean", torch.zeros(shape) if mean is None else mean.view(shape))
+        self.register_buffer("stddev", torch.ones(shape) if stddev is None else stddev.view(shape))
+
+        self.layers = torch.nn.ModuleList([
+            torch.nn.Linear(self.n_vertices * 3, 256),
+            torch.nn.Linear(256, self.latent_dim),
+        ])
+
+        self.code = torch.nn.Linear(self.latent_dim, self.latent_dim)
+
+    def forward(self, geom):
+        """
+        :param geom: B x n_vertices x 3 Tensor containing face geometries
+        :return: code: B x latent_dim Tensor containing a latent expression code/embedding
+        """
+        x = (geom - self.mean) / self.stddev
+        x = x.view(x.shape[0], self.n_vertices*3)
+
+        for layer in self.layers:
+            x = F.leaky_relu(layer(x), 0.2)
+
+        x = self.code(x)
+
+        return x
+
+
+class conv_tsa(nn.Module):
+    def __init__(self, orig_conv):
+        super(conv_tsa, self).__init__()
+        # the original conv layer
+        self.conv = copy.deepcopy(orig_conv)
+        self.conv.weight.requires_grad = False
+        planes, in_planes, _, _ = self.conv.weight.size()
+        stride, _ = self.conv.stride
+        # task-specific adapters
+        if 'alpha' in args['test.tsa_opt']:
+            self.alpha = nn.Parameter(torch.ones(planes, in_planes, 1, 1))
+            self.alpha.requires_grad = True
+
+    def forward(self, x):
+        y = self.conv(x)
+        if 'alpha' in args['test.tsa_opt']:
+            # residual adaptation in matrix form
+            y = y + F.conv2d(x, self.alpha, stride=self.conv.stride)
+        return y
+
+class resnet_tsa(nn.Module):
+    """ Attaching task-specific adapters (alpha) and/or PA (beta) to the ResNet backbone """
+    def __init__(self, orig_resnet, num_layer=1):
+        super(resnet_tsa, self).__init__()
+        self.num_layer = num_layer
+        # freeze the pretrained backbone
+        for k, v in orig_resnet.named_parameters():
+                v.requires_grad=False
+
+        # attaching task-specific adapters (alpha) to each convolutional layers
+        # note that we only attach adapters to residual blocks in the ResNet
+        for i in range(self.num_layer):
+            for block in getattr(orig_resnet, f'layer{i}'):
+                for name, m in block.named_children():
+                    if isinstance(m, nn.Conv2d):
+                        new_conv = conv_tsa(m)
+                        setattr(block, name, new_conv) 
+
+        self.backbone = orig_resnet
+
+    def forward(self, x):
+        x = self.backbone(x)
+
+class ResBlock1d(nn.Module):
+    """
+    Res block, preserve spatial resolution.
+    """
+
+    def __init__(self, in_features, out_features):
+        super(ResBlock1d, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=1)
+        self.conv2 = nn.Conv2d(in_channels=out_features, out_channels=out_features, kernel_size=1)
+        self.norm1 = BatchNorm2d(out_features, affine=True)
+        self.norm2 = BatchNorm2d(out_features, affine=True)
+        self.in_features = in_features
+        self.out_features = out_features
+        if self.in_features != self.out_features:
+            self.conv3 = nn.Conv2d(in_channels=self.in_features, out_channels=self.out_features, kernel_size=1)
+            self.norm3 = BatchNorm2d(out_features, affine=True)
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.norm1(out)
+        out = F.relu(out)
+        out = self.conv2(out)
+        out = self.norm2(out)
+        if self.in_features != self.out_features:
+            x = self.conv3(x)
+            x = self.norm3(x)
+        out += x
+        out = F.relu(out)
+
+        return out
+
+class Resnet1DEncoder(nn.Module):
+    def __init__(self, num_layer, input_dim, hidden_dim):
+        super(Resnet1DEncoder, self).__init__()
+        self.num_layer = num_layer
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        
+        for i in range(num_layer):
+            setattr(self, f'layer{i}', ResBlock1d(self.input_dim if i == 0 else self.hidden_dim, self.hidden_dim))
+
+    def forward(self, x):
+        # x: B x d
+        x = x.unsqueeze(2).unsqueeze(3)
+        for i in range(self.num_layer):
+            x = getattr(self, f'layer{i}')(x)
+
+        x = x.flatten(1)
+
+        return x
 
 class ResBottleneck(nn.Module):
     def __init__(self, in_features, stride):
@@ -89,17 +275,17 @@ class ResBottleneck(nn.Module):
     def forward(self, x):
         out = self.conv1(x)
         out = self.norm1(out)
-        out = F.relu(out)
+        out = F.leaky_relu(out)
         out = self.conv2(out)
         out = self.norm2(out)
-        out = F.relu(out)
+        out = F.leaky_relu(out)
         out = self.conv3(out)
         out = self.norm3(out)
         if self.stride != 1:
             x = self.skip(x)
             x = self.norm4(x)
         out += x
-        out = F.relu(out)
+        out = F.leaky_relu(out)
         return out
 
 

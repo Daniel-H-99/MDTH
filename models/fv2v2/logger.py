@@ -49,7 +49,7 @@ class Logger:
 
     @staticmethod
     def load_cpk(checkpoint_path, generator=None, discriminator=None, kp_detector=None, he_estimator=None, exp_transformer=None, hie_estimator=None,
-                 optimizer_generator=None, optimizer_discriminator=None, optimizer_kp_detector=None, optimizer_he_estimator=None, optimizer_hie_estimator=None):
+                 optimizer_generator=None, optimizer_discriminator=None, optimizer_kp_detector=None, optimizer_he_estimator=None, optimizer_hie_estimator=None, optimizer_exp_transformer=None):
         checkpoint = torch.load(checkpoint_path)
         if generator is not None:
             generator.load_state_dict(checkpoint['generator'])
@@ -81,9 +81,15 @@ class Logger:
         if optimizer_he_estimator is not None:
             optimizer_he_estimator.load_state_dict(checkpoint['optimizer_he_estimator'])
         if optimizer_hie_estimator is not None:
-            optimizer_he_estimator.load_state_dict(checkpoint['optimizer_hie_estimator'])
+            optimizer_hie_estimator.load_state_dict(checkpoint['optimizer_hie_estimator'])
+        if optimizer_exp_transformer is not None:
+            optimizer_exp_transformer.load_state_dict(checkpoint['optimizer_exp_transformer'])
 
-        return checkpoint['epoch']
+        epoch = checkpoint['epoch']
+
+        del checkpoint
+        
+        return epoch
 
     def __enter__(self):
         return self
@@ -107,7 +113,14 @@ class Logger:
         self.log_scores(self.names)
         self.visualize_rec(inp, out)
 
-
+    def log_ground(self, losses, inp, out):
+        self.log_iter(losses)
+        _epoch = self.epoch
+        self.epoch = -1
+        self.log_scores(self.names)
+        self.visualize_rec(inp, out)
+        self.epoch = _epoch
+        
 class Visualizer:
     def __init__(self, kp_size=5, draw_border=False, colormap='gist_rainbow'):
         self.kp_size = kp_size
@@ -171,32 +184,56 @@ class Visualizer:
         prediction = np.transpose(prediction, [0, 2, 3, 1])
         images.append(prediction)
 
-        ## Occlusion map
-        if 'occlusion_map' in out:
-            occlusion_map = out['occlusion_map'].data.cpu().repeat(1, 3, 1, 1)
-            occlusion_map = F.interpolate(occlusion_map, size=source.shape[1:3]).numpy()
-            occlusion_map = np.transpose(occlusion_map, [0, 2, 3, 1])
-            images.append(occlusion_map)
+        # random source image (must be same be normal one)
+        source = source.data.cpu()
+        kp_source = out['kp_source_random']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
+        images.append((source, kp_source))
         
-        ## Mask
-        if 'mask' in out:
-            for i in range(out['mask'].shape[1]):
-                mask = out['mask'][:, i:(i+1)].data.cpu().sum(2).repeat(1, 3, 1, 1)    # (n, 3, h, w)
-                # mask = F.softmax(mask.view(mask.shape[0], mask.shape[1], -1), dim=2).view(mask.shape)
-                mask = F.interpolate(mask, size=source.shape[1:3]).numpy()
-                mask = np.transpose(mask, [0, 2, 3, 1])
+        # random driven image
+        kp_driving = out['kp_driving_random']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
+        prediction = out['prediction_random'].data.cpu().numpy()
+        prediction = np.transpose(prediction, [0, 2, 3, 1])
+        images.append((prediction, kp_driving))
+        
+        if 'kp_source_cycled' in out:
+            # cycled source image (must be same be normal one)
+            cycled_driving = np.concatenate([driving[1:], driving[[0]]], axis=0)
+            cycled_kp_driving = np.concatenate([kp_driving[1:], kp_driving[[0]]], axis=0)
+            images.append((cycled_driving, cycled_kp_driving))
+            
+            # cycyled driven image
+            kp_driving = out['kp_driving_cycled']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
+            prediction = out['prediction_cycled'].data.cpu().numpy()
+            prediction = np.transpose(prediction, [0, 2, 3, 1])
+            images.append((prediction, kp_driving))
 
-                if i != 0:
-                    color = np.array(self.colormap((i - 1) / (out['mask'].shape[1] - 1)))[:3]
-                else:
-                    color = np.array((0, 0, 0))
 
-                color = color.reshape((1, 1, 1, 3))
+        # ## Occlusion map
+        # if 'occlusion_map' in out:
+        #     occlusion_map = out['occlusion_map'].data.cpu().repeat(1, 3, 1, 1)
+        #     occlusion_map = F.interpolate(occlusion_map, size=source.shape[1:3]).numpy()
+        #     occlusion_map = np.transpose(occlusion_map, [0, 2, 3, 1])
+        #     images.append(occlusion_map)
+        
+        # ## Mask
+        # if 'mask' in out:
+        #     for i in range(out['mask'].shape[1]):
+        #         mask = out['mask'][:, i:(i+1)].data.cpu().sum(2).repeat(1, 3, 1, 1)    # (n, 3, h, w)
+        #         # mask = F.softmax(mask.view(mask.shape[0], mask.shape[1], -1), dim=2).view(mask.shape)
+        #         mask = F.interpolate(mask, size=source.shape[1:3]).numpy()
+        #         mask = np.transpose(mask, [0, 2, 3, 1])
+
+        #         if i != 0:
+        #             color = np.array(self.colormap((i - 1) / (out['mask'].shape[1] - 1)))[:3]
+        #         else:
+        #             color = np.array((0, 0, 0))
+
+        #         color = color.reshape((1, 1, 1, 3))
                 
-                if i != 0:
-                    images.append(mask * color)
-                else:
-                    images.append(mask)
+        #         if i != 0:
+        #             images.append(mask * color)
+        #         else:
+        #             images.append(mask)
 
         image = self.create_image_grid(*images)
         image = (255 * image).astype(np.uint8)

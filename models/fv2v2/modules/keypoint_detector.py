@@ -1,10 +1,9 @@
 from torch import nn
 import torch
 import torch.nn.functional as F
-
+import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck
-
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, MeshEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree
 
 class KPDetector(nn.Module):
     """
@@ -113,13 +112,13 @@ class ImageEncoder(nn.Module):
         for i in range(5):
             self.block5.add_module('b5_'+ str(i), ResBottleneck(in_features=1024, stride=1))
 
-        self.conv5 = nn.Conv2d(in_channels=1024, out_channels=2048, kernel_size=1)
-        self.norm5 = BatchNorm2d(2048, affine=True)
-        self.block6 = ResBottleneck(in_features=2048, stride=2)
+        # self.conv5 = nn.Conv2d(in_channels=1024, out_channels=2048, kernel_size=1)
+        # self.norm5 = BatchNorm2d(2048, affine=True)
+        # self.block6 = ResBottleneck(in_features=2048, stride=2)
 
-        self.block7 = nn.Sequential()
-        for i in range(2):
-            self.block7.add_module('b7_'+ str(i), ResBottleneck(in_features=2048, stride=1))
+        # self.block7 = nn.Sequential()
+        # for i in range(2):
+        #     self.block7.add_module('b7_'+ str(i), ResBottleneck(in_features=2048, stride=1))
 
 
     def forward(self, x):
@@ -148,79 +147,113 @@ class ImageEncoder(nn.Module):
 
         out = self.block5(out)
 
-        out = self.conv5(out)
-        out = self.norm5(out)
-        out = F.relu(out)
-        out = self.block6(out)
+        # out = self.conv5(out)
+        # out = self.norm5(out)
+        # out = F.relu(out)
+        # out = self.block6(out)
 
-        out = self.block7(out)
+        # out = self.block7(out)
 
         out = F.adaptive_avg_pool2d(out, 1)
         out = out.view(out.shape[0], -1)
 
         return out
- 
+
 class ExpTransformer(nn.Module):
     """
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
+        self.num_heads = num_heads
+        self.code_dim = code_dim
+        self.num_kp = num_kp
+        self.latent_dim = latent_dim
+        self.encoder = MeshEncoder(latent_dim=self.latent_dim, num_kp=self.num_kp)
+        # self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
 
-        # self.id_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
-        self.exp_encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
-        
         # self.fc_roll = nn.Linear(2048, num_bins)
         # self.fc_pitch = nn.Linear(2048, num_bins)
         # self.fc_yaw = nn.Linear(2048, num_bins)
 
         # self.fc_t = nn.Linear(2048, 3)
+        
+        # self.exp_proj = nn.Linear(1024, 512)
+        # self.id_proj = nn.Linear(1024, 512)
 
         # self.fc_id = nn.Sequential(
-        #     nn.Linear(2048, 3*num_kp),
+        #     nn.Linear(1024, 3*num_kp),
         #     nn.Tanh()
         # )
+
+
+
+        self.vq_exp = BiCategoricalEncodingLayer(self.latent_dim // 2, self.num_heads)
+        self.codebook = nn.Parameter(torch.zeros(self.num_heads, self.code_dim).requires_grad_(True))
+        self.exp_encoder = nn.Sequential(
+            nn.Linear(self.latent_dim // 2 + self.num_heads * self.code_dim, self.latent_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(self.latent_dim, self.latent_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(self.latent_dim, self.latent_dim)
+        )
+ 
         self.fc_exp = nn.Sequential(
-            nn.Linear(2048, 3*num_kp),
-            # nn.Tanh()
+            nn.Linear(self.latent_dim, 3*num_kp),
         )
 
-        latent_dim = 2048
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(latent_dim * 2, latent_dim)
-        )
+        init.kaiming_uniform_(self.codebook)
+        
+        # latent_dim = 2048
 
-    def fuse(self, id_latent, exp_latent):
-        x = self.mlp(torch.cat([id_latent, exp_latent], dim=-1))
-        x = F.leaky_relu(x, 0.2)
-        return x
+    def split_embedding(self, img_embedding):
+        style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
+        exp_embedding = self.vq_exp(exp_embedding)  # B x num_heads
+        exp_embedding = self.decode_exp_code(exp_embedding)
+
+        return {'style': style_embedding, 'exp': exp_embedding}
+
+    def decode_exp_code(self, exp_code):
+        # B x num_heads: [-1, 1] codes
+        exp_embedding = torch.einsum('bk,kp->bkp', exp_code, F.normalize(self.codebook))
+        exp_embedding = exp_embedding.flatten(1)
+        return exp_embedding
+
+    def fuse(self, style, exp):
+        input = torch.cat([style, exp], dim=1)
+        output = self.exp_encoder(input)
+        return output
+
+    def encode(self, img):
+        embedding = self.encoder(img)
+        return self.split_embedding(embedding)
+
+    def decode(self, embedding):
+        res = {}
+        if 'id' in embedding:
+            res['id'] = self.fc_id(embedding['id']).view(len(embedding['id']), -1, 3)
+        if 'style' in embedding and 'exp' in embedding:
+            res['exp'] = self.fc_exp(self.fuse(embedding['style'], embedding['exp'])).view(len(embedding['style']), -1, 3)
+        return res
 
     def forward(self, src, drv):
-        # id_latent = self.id_encoder(src)
-        exp_latent = self.exp_encoder(drv)
+        src_embedding = self.encode(src)
+        drv_embedding = self.encode(drv)
 
-        # id_kp = self.fc_id(id_latent).view(len(id_latent), -1, 3)
-
-        # fused_latent = self.fuse(id_latent, exp_latent)
-
-        # yaw = self.fc_roll(fused_latent)
-        # pitch = self.fc_pitch(fused_latent)
-        # roll = self.fc_yaw(fused_latent)
-        # t = self.fc_t(fused_latent)
-        exp = self.fc_exp(exp_latent)
-
-        # return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'id': id_kp}
-        return {'exp': exp}
+        src_output = self.decode(src_embedding)
+        drv_output = self.decode({'style': src_embedding['style'], 'exp': drv_embedding['exp']})
+    
+        return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding}
 
 class HEEstimator(nn.Module):
     """
     Estimating head pose and expression.
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True, sections=None, headmodel_sections=None):
         super(HEEstimator, self).__init__()
-
+        num_kp = 15
         self.conv1 = nn.Conv2d(in_channels=image_channel, out_channels=block_expansion, kernel_size=7, padding=3, stride=2)
         self.norm1 = BatchNorm2d(block_expansion, affine=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -306,4 +339,15 @@ class HEEstimator(nn.Module):
         t = self.fc_t(out)
         exp = self.fc_exp(out)
 
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+        yaw = headpose_pred_to_degree(yaw)
+        pitch = headpose_pred_to_degree(pitch)
+        roll = headpose_pred_to_degree(roll)
+
+
+        R = get_rotation_matrix(yaw, pitch, roll)
+        
+        # t = torch.cat([t[:, [0]], -t[:, [1]], t[:, [2]]], dim=1)
+        # t = t[:, [1, 0, 2]]
+        
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'R': R}
+

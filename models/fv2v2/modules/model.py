@@ -1250,7 +1250,7 @@ class DiscriminatorFullModel(torch.nn.Module):
 
 
 class ExpTransformerTrainer(GeneratorFullModelWithSeg):
-    def __init__(self, stage, exp_transformer, kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=True):
+    def __init__(self, stage, exp_transformer, kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=True, device_ids=[0]):
         super(ExpTransformerTrainer, self).__init__(kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=estimate_jacobian)
         self.eval()
         for p in self.parameters():
@@ -1268,10 +1268,10 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
         if self.stage == 2:
             self.id_classifier_scale = train_params['id_classifier_scale']
-            self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale)
-            self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval()
+            self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
+            self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
         
-    def forward(self, x):
+    def forward(self, x, cycled_drive=False):
         if self.stage == 1:
             kp_source = x['source_mesh']
             kp_driving = x['driving_mesh']
@@ -1502,6 +1502,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
         elif self.stage == 2:
+
             bs = len(x['source_mesh']['value'])
             loss_values = {}
 
@@ -1530,7 +1531,22 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             kp_source_random = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_random}
 
             generated_random = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_random)
+            for k, v in list(generated_random.items()):
+                generated[f'{k}_random'] = v
+            
+            if cycled_drive:
+                ## cycled expression drive
+                src_style = tf_output['src_embedding']['style']
+                src_exp_code_decoded = tf_output['drv_embedding']['exp']
+                src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
+                cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
+                src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
+                kp_source_cycled = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_cycled}
 
+                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
+                for k, v in list(generated_cycled.items()):
+                    generated[f'{k}_cycled'] = v
+                
             if self.loss_weights['id_cls'] != 0:
                 scaled_source = self.id_classifier_scaler(x['source'])
                 scaled_driven = self.id_classifier_scaler(generated_random['prediction'])

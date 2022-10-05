@@ -9,6 +9,43 @@ from sync_batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
 import torch.nn.utils.spectral_norm as spectral_norm
 import re
 
+def get_rotation_matrix(yaw, pitch, roll):
+    yaw = yaw / 180 * 3.14
+    pitch = pitch / 180 * 3.14
+    roll = roll / 180 * 3.14
+
+    roll = roll.unsqueeze(1)
+    pitch = pitch.unsqueeze(1)
+    yaw = yaw.unsqueeze(1)
+
+    pitch_mat = torch.cat([torch.ones_like(pitch), torch.zeros_like(pitch), torch.zeros_like(pitch), 
+                          torch.zeros_like(pitch), torch.cos(pitch), -torch.sin(pitch),
+                          torch.zeros_like(pitch), torch.sin(pitch), torch.cos(pitch)], dim=1)
+    pitch_mat = pitch_mat.view(pitch_mat.shape[0], 3, 3)
+
+    yaw_mat = torch.cat([torch.cos(yaw), torch.zeros_like(yaw), torch.sin(yaw), 
+                           torch.zeros_like(yaw), torch.ones_like(yaw), torch.zeros_like(yaw),
+                           -torch.sin(yaw), torch.zeros_like(yaw), torch.cos(yaw)], dim=1)
+    yaw_mat = yaw_mat.view(yaw_mat.shape[0], 3, 3)
+
+    roll_mat = torch.cat([torch.cos(roll), -torch.sin(roll), torch.zeros_like(roll),  
+                         torch.sin(roll), torch.cos(roll), torch.zeros_like(roll),
+                         torch.zeros_like(roll), torch.zeros_like(roll), torch.ones_like(roll)], dim=1)
+    roll_mat = roll_mat.view(roll_mat.shape[0], 3, 3)
+
+    rot_mat = torch.einsum('bij,bjk,bkm->bim', pitch_mat.inverse(), yaw_mat.inverse(), roll_mat.inverse())
+
+    return rot_mat
+
+def headpose_pred_to_degree(pred):
+    device = pred.device
+    idx_tensor = [idx for idx in range(66)]
+    idx_tensor = torch.FloatTensor(idx_tensor).to(device)
+    pred = F.softmax(pred)
+    degree = torch.sum(pred*idx_tensor, axis=1) * 3 - 99
+
+    return degree
+
 
 def kp2gaussian(kp, spatial_size, kp_variance):
     """

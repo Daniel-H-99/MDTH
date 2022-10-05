@@ -22,7 +22,7 @@ warnings.filterwarnings('ignore')
 
 if __name__ == "__main__":
     
-    torch.multiprocessing.set_start_method('spawn')
+    # torch.multiprocessing.set_start_method('spawn')
 
     if sys.version_info[0] < 3:
         raise Exception("You must use Python 3 or higher. Recommended version is Python 3.7")
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--gen", default="spade", choices=["original", "spade"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
-    parser.add_argument("--checkpoint_ref", default='/mnt/aitrics_ext/ext01/daniel/checkpoint/BFv2v/ckpt_v16.7/00002099-checkpoint.pth.tar', help="path to checkpoint to restore")
+    parser.add_argument("--checkpoint_ref", default='/home/server25/hdd/minyeong_workspace/checkpoints/BFv2v/00002099-checkpoint.pth.tar', help="path to checkpoint to restore")
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
                         help="Names of the devices comma separated.")
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Print model architecture")

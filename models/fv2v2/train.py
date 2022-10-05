@@ -38,7 +38,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
 
     dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=0, drop_last=True)
 
-    trainer = ExpTransformerTrainer(stage, exp_transformer, kp_detector, he_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
+    trainer = ExpTransformerTrainer(stage, exp_transformer, kp_detector, he_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'], device_ids=device_ids)
     # generator_full = GeneratorFullModel(kp_detector, he_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
     discriminator_full = DiscriminatorFullModelWithSeg(generator, discriminator, train_params)
 
@@ -48,6 +48,21 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
         discriminator_full = DataParallelWithCallback(discriminator_full, device_ids)
 
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
+        print(f'running ground test...')
+        with torch.no_grad():
+            x = next(iter(dataloader))
+            losses_generator, generated = trainer(x, cycled_drive=True)
+            if train_params['loss_weights']['generator_gan'] != 0:
+                losses_discriminator = discriminator_full(x, generated)
+                loss_values = [val.mean() for val in losses_discriminator.values()]
+                loss = sum(loss_values)
+
+            losses_generator.update(losses_discriminator)
+            losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
+            logger.log_ground(losses=losses, inp=x, out=generated)
+            del losses
+            del generated
+        print(f'start training...')
         for epoch in trange(start_epoch, train_params['num_epochs']):
             num_item_call = 0
             num_cache_hit = 0 
@@ -58,6 +73,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 # print(f'input x: {x}')
                 num_item_call += len(x['hit'])
                 num_cache_hit += x['hit'].sum()
+
 
                 losses_generator, generated = trainer(x)
 

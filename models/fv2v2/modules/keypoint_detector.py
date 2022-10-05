@@ -3,8 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, MeshEncoder, BiCategoricalEncodingLayer
-
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, MeshEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree
 
 class KPDetector(nn.Module):
     """
@@ -252,9 +251,9 @@ class HEEstimator(nn.Module):
     Estimating head pose and expression.
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
+    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True, sections=None, headmodel_sections=None):
         super(HEEstimator, self).__init__()
-
+        num_kp = 15
         self.conv1 = nn.Conv2d(in_channels=image_channel, out_channels=block_expansion, kernel_size=7, padding=3, stride=2)
         self.norm1 = BatchNorm2d(block_expansion, affine=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -340,4 +339,15 @@ class HEEstimator(nn.Module):
         t = self.fc_t(out)
         exp = self.fc_exp(out)
 
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+        yaw = headpose_pred_to_degree(yaw)
+        pitch = headpose_pred_to_degree(pitch)
+        roll = headpose_pred_to_degree(roll)
+
+
+        R = get_rotation_matrix(yaw, pitch, roll)
+        
+        # t = torch.cat([t[:, [0]], -t[:, [1]], t[:, [2]]], dim=1)
+        # t = t[:, [1, 0, 2]]
+        
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'R': R}
+

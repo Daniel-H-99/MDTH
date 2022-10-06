@@ -218,7 +218,7 @@ class DenseMotionNetworkGeo(nn.Module):
         
         kp_source['prior'] = rotation_kps['src_normed']
         kp_driving['prior'] = rotation_kps['drv_normed']
-    
+
         out_dict['kp_source'] = {'value': kp_source['kp']}
         out_dict['kp_driving'] = {'value': kp_driving['kp']}
         

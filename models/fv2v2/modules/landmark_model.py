@@ -282,8 +282,12 @@ class LandmarkModel():
                             [0, 0, 0, 1]])
         proj = pose.get_projection()
         view = pose.get_modelview()
+        proj[3, 3] = 1
         a = multiplyABC(viewport, proj, view)
-
+        # print(f'view: {view}')
+        # print(f'proj: {proj}')
+        # while True:
+        #     pass
         # print(f'a shape: {a}')
         # print(f'proj: {pose.get_projection()}')
         # print(f'view: {pose.get_modelview()}')
@@ -330,6 +334,6 @@ class LandmarkModel():
 
         # print(f'normed mesh: {mesh_3d_points}')
         normalized_landmarks_3d = normalized_landmarks_3d[:, :3]
-        # landmarks_3d = vertices[Ind, :3]
-        return normalized_landmarks_3d, {'U': a, 'viewport': viewport, 'proj': proj, 'view': view, 'normalizer': normalizer}, Ind
+
+        return normalized_landmarks_3d, {'U': a, 'viewport': viewport, 'proj': proj, 'view': view, 'normalizer': normalizer, 'landmarks_3d': landmarks_3d}, Ind
         

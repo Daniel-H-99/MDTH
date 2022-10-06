@@ -51,7 +51,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
         print(f'running ground test...')
         with torch.no_grad():
             x = next(iter(dataloader))
-            losses_generator, generated = trainer(x, cycled_drive=True)
+            losses_generator, generated = trainer(x)
             if train_params['loss_weights']['generator_gan'] != 0:
                 losses_discriminator = discriminator_full(x, generated)
                 loss_values = [val.mean() for val in losses_discriminator.values()]

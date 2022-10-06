@@ -91,7 +91,7 @@ train_params:
     equivariance_jacobian: 0    # 10
     keypoint: 10
     headpose: 0
-    motion_match: 50
+    motion_match: 0
     teacher: 0
     expression: 0
     localized: [1, 1, 1, 1, 1, 1, 0, 10, 10]

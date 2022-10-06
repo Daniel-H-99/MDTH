@@ -89,7 +89,7 @@ class FramesDataset3(Dataset):
     """
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
-                 random_seed=0, pairs_list=None, augmentation_params=None, sections=None, cache=None, z_bias=0):
+                 random_seed=0, pairs_list=None, augmentation_params=None, sections=None, cache=None, z_bias=0, landmarkmodel_path=None):
         self.sections = sections
         self.root_dir = root_dir
         self._root_dir = root_dir
@@ -99,7 +99,7 @@ class FramesDataset3(Dataset):
         self.pairs_list = pairs_list
         self.id_sampling = True
         self.z_bias = z_bias
-        self.landmark_model = LandmarkModel('/mnt/hdd/minyeong_workspace/checkpoints/landmark')
+        self.landmark_model = LandmarkModel(landmarkmodel_path)
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))
@@ -108,6 +108,11 @@ class FramesDataset3(Dataset):
             if id_sampling:
                 train_videos = os.listdir(os.path.join(self.root_dir, tag))
                 train_videos = list(train_videos)
+                ids = {}
+                for vid in train_videos:
+                    id = vid.split('#')[0]
+                    ids[id] = ids.get(id, []) + [vid]
+                train_videos = ids
             else:
                 train_videos = os.listdir(os.path.join(root_dir, tag))
             # test_videos = os.listdir(os.path.join(root_dir, 'test'))
@@ -210,66 +215,23 @@ class FramesDataset3(Dataset):
     def __getitem__(self, idx):
         while True:
             try:
-                magic_num = int(datetime.now().timestamp())
-                idx = (idx + magic_num) % (len(self.videos))
-                id = self.videos[idx]
-                chunk = np.random.choice(list(filter(lambda x: '.mp4' not in x and '.wav' not in x, os.listdir((os.path.join(self.root_dir, id))))))
-                path = os.path.join(self.root_dir, id, chunk)
-                if self.cache is not None:
-                    rel_path = os.path.relpath(path, self._root_dir)
-                    cache_path = os.path.join(self.cache, rel_path)
-                    if not os.path.exists(cache_path):
-                        hit = False
-                        # print(f'loading to cache: {cache_path}')
-                        t = time.time()
-                        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-                        shutil.copytree(path, cache_path)
-                        t = time.time() - t
-                        # print(f'loaded to cache ({t}): {cache_path}')
-                    else:
-                        hit = True
-                        # print(f'cache hit: {cache_path}')
-                    path = cache_path
+                idx = (idx + int(datetime.now().timestamp())) % (len(self.videos))
+                if self.is_train and self.id_sampling:
+                    id = list(self.videos.keys())[idx]
+                    name = str(np.random.choice(self.videos[id]))
+                    path = str(np.random.choice(glob.glob(os.path.join(self.root_dir, name))))
+                else:
+                    name = self.videos[idx]
+                    path = os.path.join(self.root_dir, name)
 
-                frames_dir = os.path.join(path, 'frames')
-                faces_path = os.path.join(path, 'faces.pckl')
+                # if self.is_train and os.path.isdir(path):
+                frames = os.listdir(path)
+                num_frames = len(frames)
+                frame_idx = np.sort(np.random.choice(num_frames, replace=False, size=2))
+                frame_idx[1] = (frame_idx[1] + 100) % num_frames
 
-                with open(faces_path, 'rb') as f:
-                    faces = pkl.load(f)
-
-                num_frames = len(faces)
-                
-                item_indice = np.random.choice(num_frames, replace=False, size=2)
-                item_indice[1] = (item_indice[1] + magic_num) % num_frames
-
-                video_array = []
-
-                bboxes = []
-                for item_idx in item_indice:
-                    item = faces[item_idx][0]  # frame, bbox, conf
-                    fid = item['frame']
-                    bbox = item['bbox']
-                    frame_path = os.path.join(frames_dir, "{:05d}.jpg".format(fid + 1))
-                    frame = io.imread(frame_path)
-                    x1, y1, x2, y2 = extend_bbox(bbox, frame)
-                    bboxes.append([x1, y1, x2, y2])
-                bboxes = np.array(bboxes)
-                bbox_united = bboxes.mean(axis=0)
-                x1, y1, x2, y2 = bbox_united.astype(int)
-
-                for item_idx in item_indice:
-                    item = faces[item_idx][0]  # frame, bbox, conf
-                    fid = item['frame']
-                    frame_path = os.path.join(frames_dir, "{:05d}.jpg".format(fid + 1))
-                    frame = io.imread(frame_path)
-                    cropped = frame[y1:y2, x1:x2]
-                    cropped_scaled = cv2.resize(img_as_float32(cropped), self.frame_shape[:2])
-                    video_array.append(cropped_scaled)
-
-                video_array = np.stack(video_array, axis=0)
-
-                if self.transform is not None:
-                    video_array = self.transform(video_array)
+                raw_video_array = [io.imread(os.path.join(path, frames[(idx + int(datetime.now().timestamp())) % num_frames])) for idx in frame_idx]
+                video_array = np.stack([cv2.resize(img_as_float32(frame), self.frame_shape[:2]) for frame in raw_video_array], axis=0)
 
                 meshes = []
 
@@ -360,7 +322,7 @@ class FramesDataset3(Dataset):
         out['source'] = source.transpose((2, 0, 1))
         out['driving_mesh'] = meshes[1]
         out['source_mesh'] = meshes[0]
-        out['hit'] = hit
+        out['hit'] = 0
         out['name'] = path
         # out['hopenet_source'] = hopenet_video_array[0]
         # out['hopenet_driving'] = hopenet_video_array[1]

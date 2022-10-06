@@ -99,7 +99,7 @@ class FramesDataset3(Dataset):
         self.pairs_list = pairs_list
         self.id_sampling = True
         self.z_bias = z_bias
-        self.landmark_model = LandmarkModel('/mnt/warping-shared/warping-common/th/checkpoints/landmark')
+        self.landmark_model = LandmarkModel('/mnt/hdd/minyeong_workspace/checkpoints/landmark')
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))

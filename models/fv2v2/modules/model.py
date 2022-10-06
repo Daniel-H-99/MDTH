@@ -1521,19 +1521,22 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
 
-            ## random expression drive
-            src_style = tf_output['src_embedding']['style']
-            src_exp_code = tf_output['src_embedding']['exp']
-            src_exp_code_random = 2 * torch.rand(bs, self.exp_transformer.num_heads).to(src_exp_code.device) - 1
-            src_exp_code_random_decoded = self.exp_transformer.decode_exp_code(src_exp_code_random)
-            random_embedding = {'style': src_style, 'exp': src_exp_code_random_decoded}
-            src_exp_random = self.exp_transformer.decode(random_embedding)['exp']
-            kp_source_random = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_random}
+            # ## random expression drive
+            # src_style = tf_output['src_embedding']['style']
+            # src_exp_code = tf_output['src_embedding']['exp']
+            # src_exp_code_random = 2 * torch.rand(bs, self.exp_transformer.num_heads).to(src_exp_code.device) - 1
+            # src_exp_code_random_decoded = self.exp_transformer.decode_exp_code(src_exp_code_random)
+            # random_embedding = {'style': src_style, 'exp': src_exp_code_random_decoded}
+            # src_exp_random = self.exp_transformer.decode(random_embedding)['exp']
+            # kp_source_random = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_random}
+            # generated_random = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_random)
 
-            generated_random = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_random)
+            generated_random = generated
+
             for k, v in list(generated_random.items()):
                 generated[f'{k}_random'] = v
             
+
             if cycled_drive:
                 ## cycled expression drive
                 src_style = tf_output['src_embedding']['style']

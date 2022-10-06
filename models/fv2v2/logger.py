@@ -65,7 +65,7 @@ class Logger:
         
         if exp_transformer is not None:
             exp_transformer.load_state_dict(checkpoint['exp_transformer'])
-
+            print(f'exp transforer loaded')
         if hie_estimator is not None:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])
 
@@ -185,15 +185,16 @@ class Visualizer:
         images.append(prediction)
 
         # random source image (must be same be normal one)
-        source = source.data.cpu()
-        kp_source = out['kp_source_random']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
-        images.append((source, kp_source))
-        
-        # random driven image
-        kp_driving = out['kp_driving_random']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
-        prediction = out['prediction_random'].data.cpu().numpy()
-        prediction = np.transpose(prediction, [0, 2, 3, 1])
-        images.append((prediction, kp_driving))
+        if 'kp_srouce_random' in out:
+            source = source.data.cpu()
+            kp_source = out['kp_source_random']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
+            images.append((source, kp_source))
+            
+            # random driven image
+            kp_driving = out['kp_driving_random']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
+            prediction = out['prediction_random'].data.cpu().numpy()
+            prediction = np.transpose(prediction, [0, 2, 3, 1])
+            images.append((prediction, kp_driving))
         
         if 'kp_source_cycled' in out:
             # cycled source image (must be same be normal one)

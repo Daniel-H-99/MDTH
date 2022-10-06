@@ -1,7 +1,7 @@
 dataset_params:
-  root_dir: /home/server25/hdd/minyeong_workspace/Voxceleb
-  cache: /home/server25/hdd/minyeong_workspace/Voxceleb
-  landmarkmodel_path: /home/server25/hdd/minyeong_workspace/checkpoints/landmark
+  root_dir: /mnt/hdd/minyeong_workspace/data/Voxceleb
+  cache: /mnt/hdd/minyeong_workspace/data/Voxceleb
+  landmarkmodel_path: /mnt/hdd/minyeong_workspace/checkpoints/landmark
   frame_shape: [256, 256, 3]
   id_sampling: True
   pairs_list: None
@@ -74,7 +74,7 @@ train_params:
   lr_he_estimator: 2.0e-4
   lr_exp_transformer: 2.0e-4
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 2
+  batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'

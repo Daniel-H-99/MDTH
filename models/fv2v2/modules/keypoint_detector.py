@@ -191,6 +191,7 @@ class ExpTransformer(nn.Module):
 
         self.vq_exp = BiCategoricalEncodingLayer(self.latent_dim // 2, self.num_heads)
         self.codebook = nn.Parameter(torch.zeros(self.num_heads, self.code_dim).requires_grad_(True))
+        self.codebook_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.exp_encoder = nn.Sequential(
             nn.Linear(self.latent_dim // 2 + self.num_heads * self.code_dim, self.latent_dim),
             nn.LeakyReLU(0.2),
@@ -204,19 +205,19 @@ class ExpTransformer(nn.Module):
         )
 
         init.kaiming_uniform_(self.codebook)
-        
+        init.kaiming_uniform_(self.codebook_scale)
         # latent_dim = 2048
 
     def split_embedding(self, img_embedding):
         style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
-        exp_embedding = self.vq_exp(exp_embedding)  # B x num_heads
-        exp_embedding = self.decode_exp_code(exp_embedding)
+        exp_code = self.vq_exp(exp_embedding)  # B x num_heads
+        exp_embedding = self.decode_exp_code(exp_code)
 
-        return {'style': style_embedding, 'exp': exp_embedding}
+        return {'style': style_embedding, 'exp': exp_embedding, 'exp_code': exp_code}
 
     def decode_exp_code(self, exp_code):
-        # B x num_heads: [-1, 1] codes
-        exp_embedding = torch.einsum('bk,kp->bkp', exp_code, F.normalize(self.codebook))
+        # exp_code: B x num_heads: [-1, 1] codes
+        exp_embedding = torch.einsum('bk,kp->bkp', exp_code, self.codebook_scale * F.normalize(self.codebook))
         exp_embedding = exp_embedding.flatten(1)
         return exp_embedding
 

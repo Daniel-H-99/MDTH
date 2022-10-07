@@ -1271,12 +1271,15 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
             self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
         
+        self.log_loss = lambda x: -torch.log((1 - x).clamp(min=1e-6)).mean()
+
     def forward(self, x, cycled_drive=False):
         if self.stage == 1:
             kp_source = x['source_mesh']
             kp_driving = x['driving_mesh']
             
             tf_output = self.exp_transformer(x['source_mesh']['value'], x['driving_mesh']['value'])
+
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
@@ -1339,7 +1342,15 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 for k, v in list(generated_cycled.items()):
                     generated[f'{k}_cycled'] = v
                 
-                
+            if self.loss_weights['log'] != 0:
+                src_exp_code = tf_output['src_embedding']['exp_code']   # B x num_heads
+                drv_exp_code = tf_output['drv_embedding']['exp_code']   # B x num_heads
+                greater_mask = (src_exp_code >= drv_exp_code).detach() 
+                less_mask = ~greater_mask
+                greater_labels = torch.cat([src_exp_code[greater_mask], drv_exp_code[less_mask]], dim=0)
+                less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
+                loss_values['log'] = self.log_loss(greater_labels) + self.log_loss(-less_labels)
+
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3
                 motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w

@@ -282,6 +282,7 @@ class LandmarkModel():
                             [0, 0, 0, 1]])
         proj = pose.get_projection()
         view = pose.get_modelview()
+        proj[3, 3] = 1
         a = multiplyABC(viewport, proj, view)
 
         # print(f'a shape: {a}')

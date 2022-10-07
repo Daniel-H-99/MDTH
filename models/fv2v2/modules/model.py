@@ -1326,7 +1326,20 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
 
+            if cycled_drive:
+                ## cycled expression drive
+                src_style = tf_output['src_embedding']['style']
+                src_exp_code_decoded = tf_output['drv_embedding']['exp']
+                src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
+                cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
+                src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
+                kp_source_cycled = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_cycled}
 
+                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
+                for k, v in list(generated_cycled.items()):
+                    generated[f'{k}_cycled'] = v
+                
+                
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3
                 motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w

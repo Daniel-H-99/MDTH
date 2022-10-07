@@ -181,7 +181,10 @@ class DenseMotionNetworkGeo(nn.Module):
         coords_src = self.extract_prior(kp_source)
         
         src_normed = coords_src
-        drv_normed = src_normed - kp_source['exp'] + kp_driving['exp']
+        if 'exp' in kp_source and 'exp' in kp_driving:
+            drv_normed = src_normed - kp_source['exp'] + kp_driving['exp']
+        else:
+            drv_normed = self.extract_prior(kp_driving)
 
         tmp = torch.cat([src_normed, torch.ones(src_normed.shape[0], src_normed.shape[1], 1).to(device) / kp_source['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
         tmp = tmp.matmul(kp_source['U']) # B x N x 4

@@ -104,6 +104,11 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             scheduler_discriminator.step()
             cache_log = f'cache hit ratio : {num_cache_hit / num_item_call * 100:.2f} %'
             print(cache_log)
+            
+            with torch.no_grad():
+                x = next(iter(dataloader))
+                losses_generator, generated = trainer(x, cycled_drive=True)
+
             logger.log_epoch(epoch, {'exp_transformer': exp_transformer, 
             'discriminator': discriminator,
             'optimizer_exp_transformer': optimizer,

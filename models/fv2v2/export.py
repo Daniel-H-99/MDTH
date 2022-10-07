@@ -395,7 +395,7 @@ def preprocess_dict(d_list, device='cuda:0'):
         
     return res
 
-def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, que=None):
+def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=True, que=None):
     # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
     #                                         world_size=len(gpu_list), rank=rank)
     # generator = generator.to(gpu_list[rank])
@@ -422,10 +422,12 @@ def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, da
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
             
-            tf_output = exp_transformer(kp_source['value'], kp_driving['value'])
+            if use_transformer:
+                tf_output = exp_transformer(kp_source['value'], kp_driving['value'])
+                kp_source['exp'] = tf_output['src_exp']
+                kp_driving['exp'] = tf_output['drv_exp']
+
             kp_norm = kp_driving
-            kp_source['exp'] = tf_output['src_exp']
-            kp_driving['exp'] = tf_output['drv_exp']
 
             out = generator(source, kp_source=kp_source, kp_driving=kp_norm)
 
@@ -439,7 +441,7 @@ def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, da
     # torch.distributed.destroy_process_group()
     return predictions
 
-def test_model(opt, generator, exp_transformer, gpu_list):
+def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
     st = time.time()
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
@@ -705,7 +707,7 @@ def test_model(opt, generator, exp_transformer, gpu_list):
 
     # del preds
 
-    predictions = make_animation(0, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer)
+    predictions = make_animation(0, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=use_transformer)
 
     # predictions = output['prediction']
     

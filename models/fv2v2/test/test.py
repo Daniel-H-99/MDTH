@@ -60,11 +60,11 @@ def setup_exp(config):
 
 def run_session(config, src, drv, pipeline, label):
     ### preprocess
-	pipeline.preprocess_image(src)
-	pipeline.preprocess_video(drv)
+	pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite)
+	pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
     
 	### inference
-	pipeline.inference(src, drv, label)
+	pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer)
  
 def run_exp(materials):
 	for src, drv in materials.test_samples:

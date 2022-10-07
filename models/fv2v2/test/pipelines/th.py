@@ -35,7 +35,9 @@ class THPipeline():
         src_path = os.path.join(src_dir, img_name)
         dest_path = os.path.join(dest_dir, self.process_name(img_name))
         dest_file_path = os.path.join(dest_path, 'image.png')
-        if os.path.exists(dest_path) and rewrite:
+        if not os.path.exists(dest_path):
+            os.makedirs(dest_path)
+        elif rewrite:
             shutil.rmtree(dest_path, ignore_errors=True)
             os.makedirs(dest_path)
         self.landmark_model.preprocess_image(src_path, dest_file_path)
@@ -47,13 +49,15 @@ class THPipeline():
         src_path = os.path.join(src_dir, video_name)
         dest_path = os.path.join(dest_dir, self.process_name(video_name))
         dest_file_path = os.path.join(dest_path, 'video.mp4')
-        if os.path.exists(dest_path) and rewrite:
+        if not os.path.exists(dest_path):
+            os.makedirs(dest_path)
+        elif rewrite:
             shutil.rmtree(dest_path, ignore_errors=True)
             os.makedirs(dest_path)
         self.landmark_model.preprocess_video(src_path, dest_file_path)
         export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
 
-    def inference(self, src_name, drv_name, output_dir):
+    def inference(self, src_name, drv_name, output_dir, use_transformer=True):
         src_name = self.process_name(src_name)
         drv_name = self.process_name(drv_name)
         output_name = '_'.join([src_name, drv_name])
@@ -74,7 +78,7 @@ class THPipeline():
         args_run.result_dir = output_path
         args_run.result_video = 'mute.mp4'
         args_run.fps = self.config.config.common.attr.fps
-        export.test_model(args_run, self.generator, self.exp_transformer, self.gpus)
+        export.test_model(args_run, self.generator, self.exp_transformer, self.gpus, use_transformer=use_transformer)
 
         ## 4. Post Process
         # add audio

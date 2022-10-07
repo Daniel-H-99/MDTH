@@ -1,7 +1,7 @@
 env:
-    raw_path: '/home/server25/hdd/minyeong_workspace/Experiment/data'
-    checkpoint_path: '/home/server25/hdd/minyeong_workspace/checkpoints'
-    proc_path: '/home/server25/hdd/minyeong_workspace/Experiment/proc'
+    raw_path: '/mnt/hdd/minyeong_workspace/Experiment/data'
+    checkpoint_path: '/mnt/hdd/minyeong_workspace/checkpoints'
+    proc_path: '/mnt/hdd/minyeong_workspace//Experiment/proc'
     res_path: 'res'
 const:
     SUCCESS: 1
@@ -18,8 +18,8 @@ config:
                 model: '@checkpoint_path/BFv2v/00002099-checkpoint.pth.tar'
                 config: '@checkpoint_path/BFv2v/vox-256-renderer_v16.7.yaml'       
             exp_transformer:
-                model: '@checkpoint_path/MDTH/00000299-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/local_mesh_hidden_bi_categorical_stage2.yaml'            
+                model: '@checkpoint_path/MDTH/local_mesh_hidden_bi_categorical_stage2/00000334-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/local_mesh_hidden_bi_categorical_stage2/local_mesh_hidden_bi_categorical_stage2.yaml'            
         attr:
             fps: 30
     preprocess:
@@ -52,9 +52,10 @@ dynamic:
     mode: 'pair'
     input_as_file: True
     inputs:
-        pair: 'inputs/pair.txt'
-    label: 'test'
-    
+        pair: 'inputs/pair_homo.txt'
+    label: 'stage2_334_homo'
+    rewrite: False
+    use_transformer: True
 
     
     

@@ -635,7 +635,7 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True, 
     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
         mesh = {}
-        ROI_IDX = list(range(48, 68))
+        ROI_IDX = ROI_EYE_IDX + list(range(48, 68))
         ROI_IDX = torch.tensor(ROI_IDX)
         ROI_IDX_FLAME = ROI_IDX + from_flame_bias
 
@@ -643,8 +643,8 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True, 
         target_landmarks[ROI_IDX] = driving_landmark[ROI_IDX_FLAME]
 
         ### apply eye movement ###
-        target_landmarks[[3, 4] + ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
-        # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
+        # target_landmarks[[3, 4] + ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
+        target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
 
 
         # mesh['value'] = source_mesh['value']

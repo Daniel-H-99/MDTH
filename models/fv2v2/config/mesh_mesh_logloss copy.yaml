@@ -1,6 +1,7 @@
 dataset_params:
-  root_dir: /nfs/jarvis/ext01/dataset_vision/voxceleb/voxceleb1
-  cache: /mnt/aitrics_ext/ext01/daniel/shared/Voxceleb
+  root_dir: /mnt/hdd/minyeong_workspace/data/Voxceleb
+  cache: /mnt/hdd/minyeong_workspace/data/Voxceleb
+  landmarkmodel_path: /mnt/hdd/minyeong_workspace/checkpoints/landmark
   frame_shape: [256, 256, 3]
   id_sampling: True
   pairs_list: None
@@ -73,7 +74,7 @@ train_params:
   lr_he_estimator: 2.0e-4
   lr_exp_transformer: 2.0e-4
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 8
+  batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'
@@ -81,6 +82,7 @@ train_params:
     sigma_affine: 0.05
     sigma_tps: 0.005
     points_tps: 5
+  id_classifier_scale: 0.625 # 160 / image size
   loss_weights:
     generator_gan: 1                  
     discriminator_gan: 1
@@ -91,9 +93,11 @@ train_params:
     keypoint: 10
     headpose: 0
     motion_match: 50
+    log: 10
     teacher: 0
     expression: 0
     localized: [1, 1, 1, 1, 1, 1, 0, 10, 10]
+    id_cls: 10
 
 visualizer_params:
   kp_size: 5

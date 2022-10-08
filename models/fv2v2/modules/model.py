@@ -1349,7 +1349,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 less_mask = ~greater_mask
                 greater_labels = torch.cat([src_exp_code[greater_mask], drv_exp_code[less_mask]], dim=0)
                 less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
-                loss_values['log'] = self.log_loss(greater_labels) + self.log_loss(-less_labels)
+                loss_values['log'] = self.loss_weights['log'] * (self.log_loss(greater_labels) + self.log_loss(-less_labels))
 
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3

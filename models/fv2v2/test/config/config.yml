@@ -55,7 +55,7 @@ dynamic:
         pair: 'inputs/pair_hetero.txt'
     label: 'local_mesh_hidden_bi_categorical_stage2_hetero'
     rewrite: False
-    use_transformer: False
+    use_transformer: True
 
     
     

@@ -395,12 +395,14 @@ def preprocess_dict(d_list, device='cuda:0'):
         
     return res
 
-def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=True, que=None):
+def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=True, extract_driving_code=False, que=None):
     # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
     #                                         world_size=len(gpu_list), rank=rank)
     # generator = generator.to(gpu_list[rank])
     # generator = torch.nn.parallel.DistributedDataParallel(generator, device_ids=[gpu_list[rank]])
-
+    res = {}
+    if extract_driving_code:
+        driving_codes = []
     with torch.no_grad():
         predictions = []
         device = f'cuda:{gpu_list[rank]}'
@@ -414,7 +416,8 @@ def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, da
         source = source.to(device)
 
         kp_source = preprocess_dict([source_mesh] * bs, device=device)
-
+        
+        
         for frame_idx in tqdm(range(0, len(driving_meshes), bs)):
             kp_driving = preprocess_dict(driving_meshes[frame_idx:frame_idx+bs], device=device)
             if len(kp_driving['value']) < bs:
@@ -426,7 +429,10 @@ def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, da
                 tf_output = exp_transformer(kp_source['value'], kp_driving['value'])
                 kp_source['exp'] = tf_output['src_exp']
                 kp_driving['exp'] = tf_output['drv_exp']
-
+                if extract_driving_code:
+                    driving_code = tf_output['drv_embedding']['exp_code'].detach().cpu().numpy()
+                    driving_codes.append(driving_code)
+                    
             kp_norm = kp_driving
 
             out = generator(source, kp_source=kp_source, kp_driving=kp_norm)
@@ -435,13 +441,20 @@ def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, da
 
 
     predictions = np.concatenate(predictions, axis=0)
+    
+
     # predictions = np.ascontiguousarray(np.concatenate(predictions, axis=0)).astype(np.uint8).clip(0, 255))
     # que.put((rank, predictions))
 
     # torch.distributed.destroy_process_group()
-    return predictions
+    res['predictions'] = predictions
 
-def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
+    if extract_driving_code:
+        res['driving_codes'] = np.concatenate(driving_codes, axis=0)
+
+    return res
+
+def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True, extract_driving_code=False):
     st = time.time()
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
@@ -622,7 +635,7 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
         mesh = {}
-        ROI_IDX = list(range(48, 68))
+        ROI_IDX = ROI_EYE_IDX + list(range(48, 68))
         ROI_IDX = torch.tensor(ROI_IDX)
         ROI_IDX_FLAME = ROI_IDX + from_flame_bias
 
@@ -630,8 +643,8 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
         target_landmarks[ROI_IDX] = driving_landmark[ROI_IDX_FLAME]
 
         ### apply eye movement ###
-        target_landmarks[[3, 4] + ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
-        # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
+        # target_landmarks[[3, 4] + ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
+        target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
 
 
         # mesh['value'] = source_mesh['value']
@@ -707,8 +720,9 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
 
     # del preds
 
-    predictions = make_animation(0, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=use_transformer)
-
+    res = make_animation(0, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=use_transformer, extract_driving_code=extract_driving_code)
+    predictions = res['predictions']
+    
     # predictions = output['prediction']
     
     # mesh styling
@@ -725,3 +739,6 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
     predictions = meshed_frames
 
     imageio.mimsave(os.path.join(opt.result_dir, opt.result_video), predictions, fps=fps)
+    
+    if extract_driving_code:
+        np.savetxt(os.path.join(opt.result_dir, 'driving_codes.txt'), res['driving_codes'])

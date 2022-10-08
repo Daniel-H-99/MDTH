@@ -18,8 +18,8 @@ config:
                 model: '@checkpoint_path/BFv2v/00002099-checkpoint.pth.tar'
                 config: '@checkpoint_path/BFv2v/vox-256-renderer_v16.7.yaml'       
             exp_transformer:
-                model: '@checkpoint_path/MDTH/local_mesh_hidden_bi_categorical_stage2/00000299-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/local_mesh_hidden_bi_categorical_stage2/local_mesh_hidden_bi_categorical.yaml'            
+                model: '@checkpoint_path/MDTH/local_mesh_hidden/00000299-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/local_mesh_hidden/local_mesh_hidden.yaml'            
         attr:
             fps: 30
     preprocess:
@@ -53,9 +53,9 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/pair_hetero.txt'
-    label: 'local_mesh_hidden_bi_categorical_stage1_299_hetero'
+    label: 'local_mesh_hidden_hetero'
     rewrite: False
-    use_transformer: True
+    use_transformer: False
 
     
     

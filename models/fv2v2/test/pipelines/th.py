@@ -57,7 +57,7 @@ class THPipeline():
         self.landmark_model.preprocess_video(src_path, dest_file_path)
         export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
 
-    def inference(self, src_name, drv_name, output_dir, use_transformer=True):
+    def inference(self, src_name, drv_name, output_dir, use_transformer=True, extract_driving_code=False):
         src_name = self.process_name(src_name)
         drv_name = self.process_name(drv_name)
         output_name = '_'.join([src_name, drv_name])
@@ -78,7 +78,7 @@ class THPipeline():
         args_run.result_dir = output_path
         args_run.result_video = 'mute.mp4'
         args_run.fps = self.config.config.common.attr.fps
-        export.test_model(args_run, self.generator, self.exp_transformer, self.gpus, use_transformer=use_transformer)
+        export.test_model(args_run, self.generator, self.exp_transformer, self.gpus, use_transformer=use_transformer, extract_driving_code=extract_driving_code)
 
         ## 4. Post Process
         # add audio

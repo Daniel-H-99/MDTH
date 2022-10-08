@@ -3,6 +3,11 @@ import glob
 import time
 import traceback
 from datetime import datetime
+from scipy import stats
+
+def kstest_uniform(X):
+    # X : 1-D numpy
+    return stats.kstest(X, stats.uniform.cdf)
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):

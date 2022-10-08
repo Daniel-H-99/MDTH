@@ -64,7 +64,7 @@ def run_session(config, src, drv, pipeline, label):
 	pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
     
 	### inference
-	pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer)
+	pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer, extract_driving_code=config.dynamic.extract_driving_code)
  
 def run_exp(materials):
 	for src, drv in materials.test_samples:

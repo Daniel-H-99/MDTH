@@ -1,0 +1,9 @@
+young_v2/00000.png,young_v2/00003_cropped.mp4
+young_v2/00015.png,young_v2/00003_cropped.mp4
+mead_samples/emotion_faces/neutral_001.png,mead_samples/neutral_001.mp4
+mead_samples/emotion_faces/ang_001.png,mead_samples/ang_001.mp4
+mead_samples/emotion_faces/contempt_001.png,mead_samples/contempt_001.mp4
+mead_samples/emotion_faces/sad_001.png,mead_samples/sad_001.mp4
+mead_samples/emotion_faces/disgusted_001.png,mead_samples/disgusted_001.mp4
+mead_samples/emotion_faces/fear_001.png,mead_samples/fear_001.mp4
+mead_samples/emotion_faces/happy_001.png,mead_samples/happy_001.mp4

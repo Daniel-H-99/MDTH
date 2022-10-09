@@ -1270,8 +1270,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             self.id_classifier_scale = train_params['id_classifier_scale']
             self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
             self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
-        
-        self.log_loss = lambda x: -torch.log((1 - x).clamp(min=1e-6)).mean()
+          
+        self.log_loss_f = lambda x: -torch.log((1 - x).clamp(min=1e-6)).mean()
 
     def forward(self, x, cycled_drive=False):
         if self.stage == 1:
@@ -1349,7 +1349,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 less_mask = ~greater_mask
                 greater_labels = torch.cat([src_exp_code[greater_mask], drv_exp_code[less_mask]], dim=0)
                 less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
-                loss_values['log'] = self.loss_weights['log'] * (self.log_loss(greater_labels) + self.log_loss(-less_labels))
+                loss_values['log'] = self.loss_weights['log'] * (self.log_loss_f(-greater_labels) + self.log_loss_f(less_labels))
 
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3
@@ -1522,7 +1522,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['headpose'] = self.loss_weights['headpose'] * value
 
             if self.loss_weights['expression'] != 0:
-                value = torch.norm(he_driving['exp'], p=1, dim=-1).mean()
+                value = torch.norm(kp_driving['exp'], p=1, dim=-1).mean()
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
         elif self.stage == 2:

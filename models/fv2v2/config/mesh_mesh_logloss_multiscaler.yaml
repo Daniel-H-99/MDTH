@@ -40,8 +40,8 @@ model_params:
     max_features: 2048
     num_bins: 66
     num_layer: 1
-    num_heads: 32
-    code_dim: 8
+    num_heads: 256
+    code_dim: 1
   generator_params:
     block_expansion: 64
     max_features: 512
@@ -74,7 +74,7 @@ train_params:
   lr_he_estimator: 2.0e-4
   lr_exp_transformer: 2.0e-4
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 4
+  batch_size: 8
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'
@@ -93,9 +93,9 @@ train_params:
     keypoint: 10
     headpose: 0
     motion_match: 50
-    log: 10
+    log: 1
     teacher: 0
-    expression: 0
+    expression: 5
     localized: [1, 1, 1, 1, 1, 1, 0, 10, 10]
     id_cls: 10
 

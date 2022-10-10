@@ -44,9 +44,9 @@ if __name__ == "__main__":
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    if opt.mode == 'train':
-        config['train_params']['num_kp'] = config['model_params']['common_params']['num_kp']
-        config['train_params']['sections'] = config['model_params']['common_params']['sections']
+    # if opt.mode == 'train':
+        # config['train_params']['num_kp'] = config['model_params']['common_params']['num_kp']
+        # config['train_params']['sections'] = config['model_params']['common_params']['sections']
         
     if opt.checkpoint is not None:
         log_dir = os.path.join(*os.path.split(opt.checkpoint)[:-1])
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
        exp_transformer.to(opt.device_ids[0])
 
-    dataset = FramesDataset3(is_train=(opt.mode == 'train'), **config['dataset_params'], sections=config['train_params']['sections'])
+    dataset = FramesDataset3(is_train=(opt.mode == 'train'), **config['dataset_params'])
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)

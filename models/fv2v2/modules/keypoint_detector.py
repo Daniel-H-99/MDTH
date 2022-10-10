@@ -158,7 +158,7 @@ class ImageEncoder(nn.Module):
         out = out.view(out.shape[0], -1)
 
         return out
-
+    
 class ExpTransformer(nn.Module):
     """
     Estimating transformed expression of given target face expression to source identity
@@ -191,7 +191,8 @@ class ExpTransformer(nn.Module):
 
         self.vq_exp = BiCategoricalEncodingLayer(self.latent_dim // 2, self.num_heads)
         self.codebook = nn.Parameter(torch.zeros(self.num_heads, self.code_dim).requires_grad_(True))
-        self.codebook_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
+        self.codebook_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
+        self.codebook_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.exp_encoder = nn.Sequential(
             nn.Linear(self.latent_dim // 2 + self.num_heads * self.code_dim, self.latent_dim),
             nn.LeakyReLU(0.2),
@@ -205,19 +206,20 @@ class ExpTransformer(nn.Module):
         )
 
         init.kaiming_uniform_(self.codebook)
-        init.kaiming_uniform_(self.codebook_scale)
+        init.kaiming_uniform_(self.codebook_pre_scale)
+        init.kaiming_uniform_(self.codebook_post_scale)
         # latent_dim = 2048
 
     def split_embedding(self, img_embedding):
         style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
-        exp_code = self.vq_exp(exp_embedding)  # B x num_heads
+        exp_code = F.tanh(torch.einsum('bk,kp->bkp', self.vq_exp(exp_embedding), self.codebook_pre_scale).squeeze(2))  # B x num_heads
         exp_embedding = self.decode_exp_code(exp_code)
 
         return {'style': style_embedding, 'exp': exp_embedding, 'exp_code': exp_code}
 
     def decode_exp_code(self, exp_code):
         # exp_code: B x num_heads: [-1, 1] codes
-        exp_embedding = torch.einsum('bk,kp->bkp', exp_code, self.codebook_scale * F.normalize(self.codebook))
+        exp_embedding = torch.einsum('bk,kp->bkp', exp_code, self.codebook_post_scale * F.normalize(self.codebook))
         exp_embedding = exp_embedding.flatten(1)
         return exp_embedding
 
@@ -350,5 +352,5 @@ class HEEstimator(nn.Module):
         # t = torch.cat([t[:, [0]], -t[:, [1]], t[:, [2]]], dim=1)
         # t = t[:, [1, 0, 2]]
         
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'R': R}
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t}
 

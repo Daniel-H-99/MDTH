@@ -185,7 +185,7 @@ class Visualizer:
         images.append(prediction)
 
         # random source image (must be same be normal one)
-        if 'kp_srouce_random' in out:
+        if 'kp_source_random' in out:
             source = source.data.cpu()
             kp_source = out['kp_source_random']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
             images.append((source, kp_source))
@@ -196,7 +196,7 @@ class Visualizer:
             prediction = np.transpose(prediction, [0, 2, 3, 1])
             images.append((prediction, kp_driving))
         
-        if 'kp_source_cycled' in out:
+        if 'kp_driving_cycled' in out:
             # cycled source image (must be same be normal one)
             cycled_driving = np.concatenate([driving[1:], driving[[0]]], axis=0)
             cycled_kp_driving = np.concatenate([kp_driving[1:], kp_driving[[0]]], axis=0)

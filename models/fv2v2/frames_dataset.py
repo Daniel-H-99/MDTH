@@ -89,8 +89,8 @@ class FramesDataset3(Dataset):
     """
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
-                 random_seed=0, pairs_list=None, augmentation_params=None, sections=None, cache=None, z_bias=0, landmarkmodel_path=None):
-        self.sections = sections
+                 random_seed=0, pairs_list=None, augmentation_params=None, cache=None, z_bias=0, landmarkmodel_path=None):
+        # self.sections = sections
         self.root_dir = root_dir
         self._root_dir = root_dir
         self.cache = cache

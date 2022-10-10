@@ -1259,8 +1259,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         for p in discriminator.parameters():
             p.requires_grad = True
         
-        self.sections = train_params['sections']
-        self.split_ids = [sec[1] for sec in self.sections]
+        # self.sections = train_params['sections']
+        # self.split_ids = [sec[1] for sec in self.sections]
 
         if self.stage == 2:
             self.id_classifier_scale = train_params['id_classifier_scale']
@@ -1293,6 +1293,10 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
             kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
 
+            kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
+            kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
+            kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
+            kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
             # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
             # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
 
@@ -1341,12 +1345,13 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
                 cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
                 src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
-                he_source_cycled = {'yaw': he_source['yaw'], 'pitch': he_source['pitch'], 'roll': he_source['roll'], 't': he_source['t'], 'exp': src_exp_cycled}
+                he_source_cycled = {'yaw': he_source['yaw'], 'pitch': he_source['pitch'], 'roll': he_source['roll'], 't': he_source['t'], 'tf_exp': src_exp_cycled}
                 kp_source_cycled = keypoint_transformation(kp_canonical, he_source_cycled, self.estimate_jacobian)
 
                 generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):
                     generated[f'{k}_cycled'] = v
+                generated['kp_driving_cycled'] = kp_source_cycled
                 
             if self.loss_weights['log'] != 0:
                 src_exp_code = tf_output['src_embedding']['exp_code']   # B x num_heads
@@ -1387,7 +1392,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                                                 + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
                                                 + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
-            if self.loss_weights['localized'] != 0:
+            if np.array(self.loss_weights['localized']).sum() != 0:
                 localized_loss = 0
                 split = []
                 centre = []
@@ -1528,7 +1533,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['headpose'] = self.loss_weights['headpose'] * value
 
             if self.loss_weights['expression'] != 0:
-                value = torch.norm(he_driving['exp'], p=1, dim=-1).mean()
+                value = torch.norm(he_driving['tf_exp'], p=1, dim=-1).mean()
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
         elif self.stage == 2:

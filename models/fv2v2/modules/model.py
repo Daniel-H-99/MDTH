@@ -220,14 +220,14 @@ def tf_keypoint_transformation(kp_canonical, tf_kp_canonical, he):
     return {'value': kp_transformed}
 
 
-def keypoint_transformation(kp_canonical, he, estimate_jacobian=True, exp_first=False):
+def keypoint_transformation(kp_canonical, he, estimate_jacobian=True):
     kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
     yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
-    t, exp = he['t'], he['exp']
+    t, exp = he['t'], he['tf_exp']
+    
     exp = exp.view(exp.shape[0], -1, 3)
 
-    if exp_first:
-        kp = kp + exp
+    kp = kp + exp
         
     yaw = headpose_pred_to_degree(yaw)
     pitch = headpose_pred_to_degree(pitch)
@@ -242,11 +242,7 @@ def keypoint_transformation(kp_canonical, he, estimate_jacobian=True, exp_first=
     t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
     kp_t = kp_rotated + t
 
-    if not exp_first:
-        # add expression deviation 
-        kp_transformed = kp_t + exp
-    else:
-        kp_transformed = kp_t
+    kp_transformed = kp_t
 
     if estimate_jacobian:
         jacobian = kp_canonical['jacobian']   # (bs, k ,3, 3)
@@ -799,16 +795,6 @@ class GeneratorFullModel(torch.nn.Module):
         he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
         he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
-        # {'value': value, 'jacobian': jacobian}
-        kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
-        kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
-
-
-        kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
-
-        he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-        he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-
 
         # {'value': value, 'jacobian': jacobian}
         kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
@@ -1285,16 +1271,27 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
     def forward(self, x, cycled_drive=False):
         if self.stage == 1:
-            kp_source = x['source_mesh']
-            kp_driving = x['driving_mesh']
+            loss_values = {}
+            
+            bs = len(x['source_mesh']['value'])
+            
+            kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
+
+            he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             tf_output = self.exp_transformer(x['source_mesh']['value'], x['driving_mesh']['value'])
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
-            kp_source['exp'] = src_exp
-            kp_driving['exp'] = drv_exp
+            he_source['tf_exp'] = src_exp
+            he_driving['tf_exp'] = drv_exp
+
+
+            # {'value': value, 'jacobian': jacobian}
+            kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
+            kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
 
             # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
             # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
@@ -1305,9 +1302,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
             # reg = self.regularize(kp_canonical_source, kp_canonical_driving) # regularizor loss
 
-            loss_values = {}
-            
-            bs = len(x['source_mesh']['value'])
+
             
             # x_reg = kp_canonical['value'].flatten(1)
             # for x_i in x_reg:
@@ -1346,7 +1341,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
                 cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
                 src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
-                kp_source_cycled = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_cycled}
+                he_source_cycled = {'yaw': he_source['yaw'], 'pitch': he_source['pitch'], 'roll': he_source['roll'], 't': he_source['t'], 'exp': src_exp_cycled}
+                kp_source_cycled = keypoint_transformation(kp_canonical, he_source_cycled, self.estimate_jacobian)
 
                 generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):
@@ -1359,7 +1355,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 less_mask = ~greater_mask
                 greater_labels = torch.cat([src_exp_code[greater_mask], drv_exp_code[less_mask]], dim=0)
                 less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
-                loss_values['log'] = self.log_loss(greater_labels) + self.log_loss(-less_labels)
+                loss_values['log'] = self.loss_weights['log'] * (self.log_loss(greater_labels) + self.log_loss(-less_labels))
 
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3

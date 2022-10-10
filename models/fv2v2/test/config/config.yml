@@ -18,8 +18,8 @@ config:
                 model: '@checkpoint_path/BFv2v/00002099-checkpoint.pth.tar'
                 config: '@checkpoint_path/BFv2v/vox-256-renderer_v16.7.yaml'       
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_mesh_logloss_multiscaler 09_10_22_03.25.47/00000189-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_mesh_logloss_multiscaler 09_10_22_03.25.47/mesh_mesh_logloss_multiscaler.yaml'            
+                model: '@checkpoint_path/MDTH/mesh_mesh_logloss_multiscaler 09_10_22_16.53.47/00000029-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_logloss_multiscaler 09_10_22_16.53.47/mesh_mesh_logloss_multiscaler.yaml'            
         attr:
             fps: 30
     preprocess:
@@ -53,7 +53,7 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/pair_hetero.txt'
-    label: 'mesh_mesh_logloss_multiscaler_-_189_heter_driving_code'
+    label: 'mesh_mesh_logloss_multiscaler_z_199_heter_driving_code'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

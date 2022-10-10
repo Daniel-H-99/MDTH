@@ -83,10 +83,10 @@ def load_generator(config, checkpoint_path, gpu=[0]):
     with open(config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    config['train_params']['num_kp'] = config['model_params']['common_params']['num_kp']
-    config['train_params']['sections'] = config['model_params']['common_params']['sections']
+    # config['train_params']['num_kp'] = config['model_params']['common_params']['num_kp']
+    # config['train_params']['sections'] = config['model_params']['common_params']['sections']
 
-    sections = config['train_params']['sections']
+    # sections = config['train_params']['sections']
     
     generator = load_generator_checkpoints(config=config, checkpoint_path=checkpoint_path, gpu=gpu)
 

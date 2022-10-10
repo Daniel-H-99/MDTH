@@ -1330,7 +1330,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             # print('entering generator')
             generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
-
+            generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
 

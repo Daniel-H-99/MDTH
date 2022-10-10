@@ -340,9 +340,9 @@ class HEEstimator(nn.Module):
         t = self.fc_t(out)
         exp = self.fc_exp(out)
 
-        yaw = headpose_pred_to_degree(yaw)
-        pitch = headpose_pred_to_degree(pitch)
-        roll = headpose_pred_to_degree(roll)
+        # yaw = headpose_pred_to_degree(yaw)
+        # pitch = headpose_pred_to_degree(pitch)
+        # roll = headpose_pred_to_degree(roll)
 
 
         # R = get_rotation_matrix(yaw, pitch, roll)

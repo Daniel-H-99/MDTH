@@ -345,7 +345,7 @@ class HEEstimator(nn.Module):
         roll = headpose_pred_to_degree(roll)
 
 
-        R = get_rotation_matrix(yaw, pitch, roll)
+        # R = get_rotation_matrix(yaw, pitch, roll)
         
         # t = torch.cat([t[:, [0]], -t[:, [1]], t[:, [2]]], dim=1)
         # t = t[:, [1, 0, 2]]

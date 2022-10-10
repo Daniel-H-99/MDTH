@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from modules.util import ResBlock2d, SameBlock2d, UpBlock2d, DownBlock2d, ResBlock3d, SPADEResnetBlock
-from modules.dense_motion import DenseMotionNetwork, DenseMotionNetworkGeo
+from modules.dense_motion import DenseMotionNetwork
 
 
 class OcclusionAwareGenerator(nn.Module):
@@ -113,7 +113,6 @@ class OcclusionAwareGenerator(nn.Module):
         out = F.sigmoid(out)
 
         output_dict["prediction"] = out
-        output_dict["deformation"] = deformation
 
         return output_dict
 
@@ -162,12 +161,12 @@ class SPADEDecoder(nn.Module):
 class OcclusionAwareSPADEGenerator(nn.Module):
 
     def __init__(self, image_channel, feature_channel, num_kp, block_expansion, max_features, num_down_blocks, reshape_channel, reshape_depth,
-                 num_resblocks, estimate_occlusion_map=False, dense_motion_params=None, estimate_jacobian=False, sections=None):
+                 num_resblocks, estimate_occlusion_map=False, dense_motion_params=None, estimate_jacobian=False):
         super(OcclusionAwareSPADEGenerator, self).__init__()
 
         if dense_motion_params is not None:
-            self.dense_motion_network = DenseMotionNetworkGeo(num_kp=num_kp, feature_channel=feature_channel,
-                                                           estimate_occlusion_map=estimate_occlusion_map, sections=sections,
+            self.dense_motion_network = DenseMotionNetwork(num_kp=num_kp, feature_channel=feature_channel,
+                                                           estimate_occlusion_map=estimate_occlusion_map,
                                                            **dense_motion_params)
         else:
             self.dense_motion_network = None
@@ -224,11 +223,7 @@ class OcclusionAwareSPADEGenerator(nn.Module):
         if self.dense_motion_network is not None:
             dense_motion = self.dense_motion_network(feature=feature_3d, kp_driving=kp_driving,
                                                      kp_source=kp_source)
-                                                     
             output_dict['mask'] = dense_motion['mask']
-            output_dict['heatmap'] = dense_motion['heatmap']
-            output_dict['kp_source'] = dense_motion['kp_source']
-            output_dict['kp_driving'] = dense_motion['kp_driving']
 
             if 'occlusion_map' in dense_motion:
                 occlusion_map = dense_motion['occlusion_map']
@@ -252,6 +247,5 @@ class OcclusionAwareSPADEGenerator(nn.Module):
         out = self.decoder(out)
 
         output_dict["prediction"] = out
-        output_dict["deformation"] = deformation
-        
+
         return output_dict

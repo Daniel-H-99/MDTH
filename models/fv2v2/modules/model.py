@@ -799,6 +799,16 @@ class GeneratorFullModel(torch.nn.Module):
         he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
         he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
+        # {'value': value, 'jacobian': jacobian}
+        kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
+        kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
+
+
+        kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
+
+        he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+        he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+
 
         # {'value': value, 'jacobian': jacobian}
         kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)

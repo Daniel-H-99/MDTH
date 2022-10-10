@@ -1267,7 +1267,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
             self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
         
-        self.log_loss = lambda x: -torch.log((1 - x).clamp(min=1e-6)).mean()
+        self.log_loss = lambda x: -torch.log((1 + x).clamp(min=1e-6)).mean()
 
     def forward(self, x, cycled_drive=False):
         if self.stage == 1:

@@ -1273,14 +1273,14 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         if self.stage == 1:
             loss_values = {}
             
-            bs = len(x['source_mesh']['value'])
+            bs = len(x['source'])
             
             kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
             he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
-            tf_output = self.exp_transformer(x['source_mesh']['value'], x['driving_mesh']['value'])
+            tf_output = self.exp_transformer(he_source['out'], he_driving['out'])
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']

@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, MeshEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree
+from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree
 
 class KPDetector(nn.Module):
     """
@@ -164,13 +164,14 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_heads = num_heads
         self.code_dim = code_dim
         self.num_kp = num_kp
+        self.input_dim = input_dim
         self.latent_dim = latent_dim
-        self.encoder = MeshEncoder(latent_dim=self.latent_dim, num_kp=self.num_kp)
+        self.encoder = LinearEncoder(latent_dim=self.latent_dim, input_dim=self.input_dim)
         # self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
 
         # self.fc_roll = nn.Linear(2048, num_bins)
@@ -341,7 +342,7 @@ class HEEstimator(nn.Module):
         roll = self.fc_yaw(out)
         t = self.fc_t(out)
         exp = self.fc_exp(out)
-
+        
         # yaw = headpose_pred_to_degree(yaw)
         # pitch = headpose_pred_to_degree(pitch)
         # roll = headpose_pred_to_degree(roll)
@@ -352,5 +353,5 @@ class HEEstimator(nn.Module):
         # t = torch.cat([t[:, [0]], -t[:, [1]], t[:, [2]]], dim=1)
         # t = t[:, [1, 0, 2]]
         
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t}
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'out': out}
 

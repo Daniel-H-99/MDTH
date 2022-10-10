@@ -121,6 +121,40 @@ class BiCategoricalEncodingLayer(nn.Module):
         x = 2 * x - 1
         return x
 
+class LinearEncoder(nn.Module):
+    def __init__(self, latent_dim: int = 128, input_dim: int = 128):
+        """
+        :param latent_dim: size of the latent expression embedding before quantization through Gumbel softmax
+        :param n_vertices: number of face mesh vertices
+        :param mean: mean position of each vertex
+        :param stddev: standard deviation of each vertex position
+        :param model_name: name of the model, used to load and save the model
+        """
+        super(LinearEncoder, self).__init__()
+        
+        self.input_dim = input_dim
+        self.latent_dim = latent_dim
+
+        
+        self.layers = torch.nn.ModuleList([
+            torch.nn.Linear(self.input_dim, self.latent_dim)
+        ])
+
+        self.code = torch.nn.Linear(self.latent_dim, self.latent_dim)
+
+    def forward(self, x):
+        """
+        :param geom: B x n_vertices x 3 Tensor containing face geometries
+        :return: code: B x latent_dim Tensor containing a latent expression code/embedding
+        """
+        
+        for layer in self.layers:
+            x = F.leaky_relu(layer(x), 0.2)
+
+        x = self.code(x)
+
+        return x
+    
 
 class MeshEncoder(nn.Module):
     def __init__(self, latent_dim: int = 128, n_vertices: int = 68, num_kp: int = 478, mean=None, stddev=None):

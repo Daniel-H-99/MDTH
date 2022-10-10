@@ -99,7 +99,7 @@ class FramesDataset3(Dataset):
         self.pairs_list = pairs_list
         self.id_sampling = True
         self.z_bias = z_bias
-        self.landmark_model = LandmarkModel(landmarkmodel_path)
+        # self.landmark_model = LandmarkModel(landmarkmodel_path)
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))
@@ -237,16 +237,16 @@ class FramesDataset3(Dataset):
 
                 for i, frame in enumerate(video_array):
                     L = self.frame_shape[0]
-                    mesh, noise, normalizer = self.extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
+                    # mesh, noise, normalizer = self.extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
                     A = np.array([[-1, -1, 0]], dtype='float32') # 3 x 1
-                    # mesh = {}
+                    mesh = {}
 
                     mesh_mp = extract_mesh(img_as_ubyte(frame))
                     right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
                     left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
                     # print(f'right_iris shape: {right_iris.shape}')
-                    mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
-                    mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
+                    # mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
+                    # mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
                     # print(f'right_iris: {mesh["value"][3]}')
                     # print(f'right_iris: {mesh["value"][3]}')
                     # print(f'right_eye: {mesh["value"][36:42].mean(axis=0)}')
@@ -254,14 +254,14 @@ class FramesDataset3(Dataset):
                     mesh_mp['_raw_value'] = mesh_mp['raw_value'].clone().detach()
 
 
-                    if noise is not None:
-                        mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
-                        # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
-                        # print(f'onise: {noise[0]}')
-                        # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
-                        # print(f'mesh open right: {mesh["raw_value"][36:42]}')
-                        mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
-                        mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
+                    # if noise is not None:
+                    #     mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
+                    #     # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
+                    #     # print(f'onise: {noise[0]}')
+                    #     # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
+                    #     # print(f'mesh open right: {mesh["raw_value"][36:42]}')
+                    #     mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
+                    #     mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
 
                     # print(f'value: {mesh["raw_value"][36:42]} ')
                     # print(f'mp value: {mesh_mp["raw_value"][RIGHT_EYE_IDX]}')

@@ -240,6 +240,16 @@ class LandmarkModel():
 
         return output
 
+    def get_landmarks_batch(self, frames):
+        # frames: B x C x H x W
+        frames = frames.transpose(0, 2, 3, 1)
+        landmarks = []
+        for frame in frames:
+            bb, lm = self.get_landmarks_fa(frame)
+            landmarks.append(lm)
+        landmarks = np.array(landmarks)
+        return landmarks
+    
     def get_landmarks_fa(self, frame):
         frame = frame[:, :, :3]
         H, W = frame.shape[0:2]

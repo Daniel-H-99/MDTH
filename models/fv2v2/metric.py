@@ -1,6 +1,7 @@
 """Code for computation of PLCC, SRCC and KRCC between
     PIQ metrics predictions and ground truth scores from MOS databases.
 """
+from tkinter.tix import Y_REGION
 import piq
 import tqdm
 import torch
@@ -10,6 +11,7 @@ import torchvision
 
 import pandas as pd
 import numpy as np
+from scipy import stats
 
 from typing import List, Callable, Tuple
 from pathlib import Path
@@ -20,8 +22,9 @@ from dataclasses import dataclass
 from torch import nn
 from itertools import chain
 import os
+from modules.landmark_model import LandmarkModel
 
-# L1 ↓ FID ↓ SSIM ↑ MS-SSIM ↑ LPIPS ↓ AKD ↓ PSNR ↓
+# L1 ↓ FID ↓ SSIM ↑ MS-SSIM ↑ LPIPS ↓ PSNR ↓ AKD ↓ 
 
 
 ## load images from directory
@@ -39,10 +42,11 @@ class DATASET(Dataset):
         return frame
     
 class MetricEvaluater():
-    def __init__(self):
-        super(MetricEvaluater, self).__init__()
+    def __init__(self, config, landmark_model=None):
+        self.config = config
         self.dataset = DATASET
         self.dataloader = DataLoader
+        self.landmark_model = LandmarkModel(config.lanmarkmodel_path) if landmark_model is None else landmark_model
         
     def get_dataloader(self, path, **kwargs):
         dataset = self.dataset(path)
@@ -62,7 +66,7 @@ class MetricEvaluater():
                 frame_y = imread(path_y)
                 pairs.append([frame_x, frame_y])
         
-        pairs = torch.tensor(np.array(pairs))
+        pairs = torch.tensor(np.array(pairs)) / 255.0
         
         return pairs
     
@@ -96,8 +100,50 @@ class MetricEvaluater():
             y = pairs[:, 1]
         return metric(x, y)
     
-    def run(self, metrics=[], ):
-        query
+    def LPIPS(self, x, y, is_path=True):
+        metric = piq.LPIPS()
+        if is_path:
+            pairs = self.get_paired_frames(x, y)
+            x = pairs[:, 0]
+            y = pairs[:, 1]
+        return metric(x, y)
+    
+    def PSNR(self, x, y, is_path=True):
+        metric = piq.psnr()
+        if is_path:
+            pairs = self.get_paired_frames(x, y)
+            x = pairs[:, 0]
+            y = pairs[:, 1]
+        return metric(x, y)
+    
+    def calc_dist_uniformity(self, x, func=None, is_path=True):
+        if is_path:
+            # x: path to samples in .txt format
+            samples = np.loadtxt(x)
+        else:
+            smaples = x
+        if func is not None:
+            samples = func(samples)
+        return stats.kstest(samples, stats.uniform.cdf)
+    
+    def calc_dist_similarity(self, x, y, is_path=True):
+        pass
+    
+    def AKD(self, x, y, is_path):
+        # x,y : B x C x H x W images
+        if is_path:
+            pairs = self.get_paired_frames(x, y)
+            x = pairs[:, 0]
+            y = pairs[:, 1]
+        bs = len(lm_x)
+        lm_x = self.landmark_model.get_landmarks_batch(x).view(bs, -1)
+        lm_y = self.landmark_model.get_landmarks_batch(y).view(bs, -1)
+        
+        res = np.linalg.norm(lm_x - lm_y, axis=-1).mean()
+        return res
+    
+    def run(self, metrics=[]):
+        pass
 
 @dataclass
 class Metric:

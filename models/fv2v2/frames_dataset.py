@@ -99,7 +99,7 @@ class FramesDataset3(Dataset):
         self.pairs_list = pairs_list
         self.id_sampling = True
         self.z_bias = z_bias
-        # self.landmark_model = LandmarkModel(landmarkmodel_path)
+        self.landmark_model = LandmarkModel(landmarkmodel_path)
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))
@@ -237,9 +237,9 @@ class FramesDataset3(Dataset):
 
                 for i, frame in enumerate(video_array):
                     L = self.frame_shape[0]
-                    # mesh, noise, normalizer = self.extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
+                    mesh, noise, normalizer = self.extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
                     A = np.array([[-1, -1, 0]], dtype='float32') # 3 x 1
-                    mesh = {}
+                    # mesh = {}
 
                     mesh_mp = extract_mesh(img_as_ubyte(frame))
                     right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3

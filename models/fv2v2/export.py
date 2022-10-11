@@ -6,6 +6,7 @@ import face_alignment
 import argparse
 import os
 import torch
+import torch.nn.functional as F
 import yaml 
 import imageio
 import numpy as np
@@ -22,7 +23,7 @@ from skimage import img_as_ubyte, img_as_float32
 import torch.multiprocessing as mp
 import math
 ###############################################################
-from modules.keypoint_detector import HEEstimator, ExpTransformer
+from modules.keypoint_detector import HEEstimator, ExpTransformer, KPDetector
 from modules.landmark_model import LandmarkModel
 from modules.generator import OcclusionAwareSPADEGenerator
 from sync_batchnorm import DataParallelWithCallback
@@ -50,6 +51,21 @@ def load_he_estimator(config, he_estimator_path, gpu=[0]):
     he_estimator.load_state_dict(ckpt['he_estimator'])
     he_estimator.eval()
     return he_estimator
+
+def load_kp_extractor(config, kp_extractor_path, gpu=[0]):
+    assert config is not None
+    with open(config) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
+                            **config['model_params']['common_params'])
+
+    if torch.cuda.is_available():
+        kp_detector.to(gpu[0])
+
+    ckpt = torch.load(kp_extractor_path, map_location=f'cuda:{gpu[0]}')
+    kp_detector.load_state_dict(ckpt['kp_detector'])
+    kp_detector.eval()
+    return kp_detector
 
 def load_exp_transformer(config, checkpoint_path, gpu=[0]):
     with open(config) as f:
@@ -134,7 +150,7 @@ def extract_landmark_from_video(target, he_estimator, landmark_model, rewrite=Fa
     resource = os.path.join(target, 'video.mp4')
     output_file_path = os.path.join(target, '3d_landmarks.pt')
     if os.path.exists(output_file_path) and not rewrite:
-        return
+        return False
     if not os.path.exists(target):
         os.mkdir(target)
 
@@ -220,6 +236,8 @@ def extract_landmark_from_video(target, he_estimator, landmark_model, rewrite=Fa
             break
 
     torch.save(landmarks, output_file_path)
+    
+    return True
 
 def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, rel_maximum=None, scale=None, center_align=False, center=None):
     # origin: float
@@ -395,12 +413,84 @@ def preprocess_dict(d_list, device='cuda:0'):
         
     return res
 
-def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=True, que=None):
+def headpose_pred_to_degree(pred):
+    device = pred.device
+    idx_tensor = [idx for idx in range(66)]
+    idx_tensor = torch.FloatTensor(idx_tensor).to(device)
+    pred = F.softmax(pred)
+    degree = torch.sum(pred*idx_tensor, axis=1) * 3 - 99
+
+    return degree
+def get_rotation_matrix(yaw, pitch, roll):
+    yaw = yaw / 180 * 3.14
+    pitch = pitch / 180 * 3.14
+    roll = roll / 180 * 3.14
+
+    roll = roll.unsqueeze(1)
+    pitch = pitch.unsqueeze(1)
+    yaw = yaw.unsqueeze(1)
+
+    pitch_mat = torch.cat([torch.ones_like(pitch), torch.zeros_like(pitch), torch.zeros_like(pitch), 
+                          torch.zeros_like(pitch), torch.cos(pitch), -torch.sin(pitch),
+                          torch.zeros_like(pitch), torch.sin(pitch), torch.cos(pitch)], dim=1)
+    pitch_mat = pitch_mat.view(pitch_mat.shape[0], 3, 3)
+
+    yaw_mat = torch.cat([torch.cos(yaw), torch.zeros_like(yaw), torch.sin(yaw), 
+                           torch.zeros_like(yaw), torch.ones_like(yaw), torch.zeros_like(yaw),
+                           -torch.sin(yaw), torch.zeros_like(yaw), torch.cos(yaw)], dim=1)
+    yaw_mat = yaw_mat.view(yaw_mat.shape[0], 3, 3)
+
+    roll_mat = torch.cat([torch.cos(roll), -torch.sin(roll), torch.zeros_like(roll),  
+                         torch.sin(roll), torch.cos(roll), torch.zeros_like(roll),
+                         torch.zeros_like(roll), torch.zeros_like(roll), torch.ones_like(roll)], dim=1)
+    roll_mat = roll_mat.view(roll_mat.shape[0], 3, 3)
+
+    rot_mat = torch.einsum('bij,bjk,bkm->bim', pitch_mat, yaw_mat, roll_mat)
+
+    return rot_mat
+
+
+def keypoint_transformation(kp_canonical, he, estimate_jacobian=False):
+    kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
+    yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
+    t, exp = he['t'], he['tf_exp']
+    
+    exp = exp.view(exp.shape[0], -1, 3)
+
+    kp = kp + exp
+        
+    yaw = headpose_pred_to_degree(yaw)
+    pitch = headpose_pred_to_degree(pitch)
+    roll = headpose_pred_to_degree(roll)
+
+    rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
+    
+    # keypoint rotation
+    kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
+
+    # keypoint translation
+    t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
+    kp_t = kp_rotated + t
+
+    kp_transformed = kp_t
+
+    if estimate_jacobian:
+        jacobian = kp_canonical['jacobian']   # (bs, k ,3, 3)
+        jacobian_transformed = torch.einsum('bmp,bkps->bkms', rot_mat, jacobian)
+    else:
+        jacobian_transformed = None
+
+    return {'value': kp_transformed, 'jacobian': jacobian_transformed}
+
+
+def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, kp_extractor, he_estimator, use_transformer=True, extract_driving_code=False, que=None):
     # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
     #                                         world_size=len(gpu_list), rank=rank)
     # generator = generator.to(gpu_list[rank])
     # generator = torch.nn.parallel.DistributedDataParallel(generator, device_ids=[gpu_list[rank]])
-
+    res = {}
+    if extract_driving_code:
+        driving_codes = []
     with torch.no_grad():
         predictions = []
         device = f'cuda:{gpu_list[rank]}'
@@ -414,19 +504,37 @@ def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, da
         source = source.to(device)
 
         kp_source = preprocess_dict([source_mesh] * bs, device=device)
+        
+        kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
+        he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
+        
         for frame_idx in tqdm(range(0, len(driving_meshes), bs)):
-            kp_driving = preprocess_dict(driving_meshes[frame_idx:frame_idx+bs], device=device)
-            if len(kp_driving['value']) < bs:
-                kp_source = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
+            driving_frame = driving_video[frame_idx:frame_idx+bs].to(device)
+
+            if len(driving_frame) < bs:
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
-            
-            if use_transformer:
-                tf_output = exp_transformer(kp_source['value'], kp_driving['value'])
-                kp_source['exp'] = tf_output['src_exp']
-                kp_driving['exp'] = tf_output['drv_exp']
+                kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
+                he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
+
+            he_driving = he_estimator(driving_frame)      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            
+            tf_output = exp_transformer(he_source['out'], he_driving['out'])
+
+            src_exp = tf_output['src_exp']
+            drv_exp = tf_output['drv_exp']
+
+            he_source['tf_exp'] = src_exp
+            he_driving['tf_exp'] = drv_exp
+            
+            driving_codes.append(tf_output['drv_embedding']['exp_code'].detach().cpu().numpy())
+
+            # {'value': value, 'jacobian': jacobian}
+            kp_source = keypoint_transformation(kp_canonical, he_source)
+            kp_driving = keypoint_transformation(kp_canonical, he_driving)
+            
             kp_norm = kp_driving
 
             out = generator(source, kp_source=kp_source, kp_driving=kp_norm)
@@ -435,34 +543,59 @@ def make_animation(rank, gpu_list, source_image, source_mesh, driving_meshes, da
 
 
     predictions = np.concatenate(predictions, axis=0)
+    # print(f'predictions shape: {predictions.shape}')
+    # while True:
+    #     pass
     # predictions = np.ascontiguousarray(np.concatenate(predictions, axis=0)).astype(np.uint8).clip(0, 255))
     # que.put((rank, predictions))
 
     # torch.distributed.destroy_process_group()
-    return predictions
+    res['predictions'] = predictions
 
-def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
+    if extract_driving_code:
+        res['driving_codes'] = np.concatenate(driving_codes, axis=0)
+
+    return res
+
+def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False):
     st = time.time()
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    config['train_params']['num_kp'] = config['model_params']['common_params']['num_kp']
-    config['train_params']['sections'] = config['model_params']['common_params']['sections']
+    # config['train_params']['num_kp'] = config['model_params']['common_params']['num_kp']
+    # config['train_params']['sections'] = config['model_params']['common_params']['sections']
 
-    sections = config['train_params']['sections']
-    estimate_jacobian = config['model_params']['common_params']['estimate_jacobian']
+    # sections = config['train_params']['sections']
 
-    source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
+    # reader = imageio.get_reader(os.path.join(opt.driving_dir, 'video.mp4'))
+    # opt.fps = reader.get_meta_data()['fps']
+    # driving_video = []
+    # try:
+    #     for im in reader:
+    #         driving_video.append(im)
+    # except RuntimeError:
+    #     pass
+    # reader.close()
 
-    section_indices = []
-    sections_indices_splitted = []
-    for sec in sections:
-        section_indices.extend(sec[0])
-        sections_indices_splitted.append(sec[0])
-    
+    driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
+    driving_video = []
+    for frame_path in driving_frames_path:
+        driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
+        driving_video.append(driving_frame)
+    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video])).permute(0, 3, 1, 2).float()
+
+    # section_indices = []
+    # sections_indices_splitted = []
+    # for sec in sections:
+    #     section_indices.extend(sec[0])
+    #     sections_indices_splitted.append(sec[0])
+
+        
     fps = opt.fps
 
     frame_shape = config['dataset_params']['frame_shape']
+
+    source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
     if len(source_image.shape) == 2:
         source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)
@@ -502,7 +635,7 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
     source_mesh['b'] = b
 
     raw_mesh = source_mesh['raw_value']
-    source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
+    # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
 
     driving_landmarks = torch.load(os.path.join(opt.driving_dir, '3d_landmarks.pt'))
     num_of_frames = len(driving_landmarks)
@@ -622,7 +755,7 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
         mesh = {}
-        ROI_IDX = list(range(48, 68))
+        ROI_IDX = ROI_EYE_IDX + list(range(48, 68))
         ROI_IDX = torch.tensor(ROI_IDX)
         ROI_IDX_FLAME = ROI_IDX + from_flame_bias
 
@@ -630,8 +763,8 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
         target_landmarks[ROI_IDX] = driving_landmark[ROI_IDX_FLAME]
 
         ### apply eye movement ###
-        target_landmarks[[3, 4] + ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
-        # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
+        # target_landmarks[[3, 4] + ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
+        target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
 
 
         # mesh['value'] = source_mesh['value']
@@ -683,8 +816,8 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
     for mesh in driving_meshes:
         raw_mesh = torch.cat([mesh['value'] * SCALE, torch.ones(mesh['value'].shape[0], 1)], dim=1).matmul(mesh['U']).int()
         mesh['raw_mesh'] = raw_mesh
-        mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
-        target_meshes.append(raw_mesh[section_indices])
+        # mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
+        # target_meshes.append(raw_mesh[section_indices])
 
     # que = mp.Manager().Queue()
 
@@ -707,8 +840,9 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
 
     # del preds
 
-    predictions = make_animation(0, gpu_list, source_image, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, use_transformer=use_transformer)
-
+    res = make_animation(0, gpu_list, source_image, driving_video, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, kp_extractor, he_estimator, use_transformer=use_transformer, extract_driving_code=extract_driving_code)
+    predictions = res['predictions']
+    
     # predictions = output['prediction']
     
     # mesh styling
@@ -716,12 +850,17 @@ def test_model(opt, generator, exp_transformer, gpu_list, use_transformer=True):
 
     for i, frame in enumerate(predictions):
         frame = np.ascontiguousarray(img_as_ubyte(frame))
-        if i >= len(target_meshes):
-            continue
-        mesh = target_meshes[i]
+        # if i >= len(target_meshes):
+        #     continue
+        # mesh = target_meshes[i]
         # frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=sections_indices_splitted, mask=frame)
         meshed_frames.append(frame)
 
     predictions = meshed_frames
 
     imageio.mimsave(os.path.join(opt.result_dir, opt.result_video), predictions, fps=fps)
+    
+    if extract_driving_code:
+        np.savetxt(os.path.join(opt.result_dir, 'driving_codes.txt'), res['driving_codes'])
+        
+    return predictions

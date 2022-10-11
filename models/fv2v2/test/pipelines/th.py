@@ -5,6 +5,8 @@ import copy
 import torch
 import pathlib
 import shutil
+import imageio
+
 root_dir = str(pathlib.Path(__file__).parent / '..' / '..')
 sys.path.insert(0, root_dir)
 import export
@@ -28,7 +30,7 @@ class THPipeline():
         self.generator = export.load_generator(self.config.config.common.checkpoints.generator.config, self.config.config.common.checkpoints.generator.model, self.gpus)
         self.he_estimator = export.load_he_estimator(self.config.config.common.checkpoints.he_estimator.config, self.config.config.common.checkpoints.he_estimator.model, self.gpus)
         self.landmark_model = export.load_landmark_model(self.config.config.common.checkpoints.landmark_model.dir, self.gpus)
-
+        self.kp_extractor = export.load_kp_extractor(self.config.config.common.checkpoints.kp_extractor.config, self.config.config.common.checkpoints.kp_extractor.model, self.gpus)
     def preprocess_image(self, img_name, rewrite=False):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
@@ -55,7 +57,27 @@ class THPipeline():
             shutil.rmtree(dest_path, ignore_errors=True)
             os.makedirs(dest_path)
         self.landmark_model.preprocess_video(src_path, dest_file_path)
-        export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
+        rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
+        
+        if rewritten:
+            frames_dir = os.path.join(dest_path, 'frames')
+            if os.path.exists(frames_dir):
+                shutil.rmtree(frames_dir)
+            os.makedirs(frames_dir)
+            # save each frames in frames directory
+            reader = imageio.get_reader(os.path.join(dest_file_path))
+            fps = reader.get_meta_data()['fps']
+            driving_video = []
+            try:
+                for im in reader:
+                    driving_video.append(im)
+            except RuntimeError:
+                pass
+            reader.close()
+            
+            for i, frame in enumerate(driving_video):
+                imageio.imwrite(os.path.join(frames_dir, '{:05d}.png'.format(i)), frame)
+            
 
     def inference(self, src_name, drv_name, output_dir, use_transformer=True, extract_driving_code=False):
         src_name = self.process_name(src_name)
@@ -71,6 +93,10 @@ class THPipeline():
         if not os.path.exists(output_path):
             os.makedirs(output_path)
             
+        ## leave inputs (src_path, drv_path) as inputs.txt
+        with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
+            f.writelines([src_path, drv_path])
+            
         args_run = copy.copy(self.config.config.inference.attr)
         args_run.config = self.config.config.common.checkpoints.exp_transformer.config
         args_run.source_dir = src_path
@@ -78,7 +104,7 @@ class THPipeline():
         args_run.result_dir = output_path
         args_run.result_video = 'mute.mp4'
         args_run.fps = self.config.config.common.attr.fps
-        export.test_model(args_run, self.generator, self.exp_transformer, self.gpus, use_transformer=use_transformer, extract_driving_code=extract_driving_code)
+        export.test_model(args_run, self.generator, self.exp_transformer, self.kp_extractor, self.he_estimator, self.gpus, use_transformer=use_transformer, extract_driving_code=extract_driving_code)
 
         ## 4. Post Process
         # add audio

@@ -166,6 +166,20 @@ def get_rotation_matrix(yaw, pitch, roll):
     return rot_mat
 '''
 
+def keypoint_transformation(kp_canonical, mesh):
+    device = kp_canonical['value'].device
+    
+    kp_normed = kp_canonical['value'] + mesh['exp']
+
+    tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['U']) # B x N x 4
+    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    kp_transformed = tmp # B x N x 3
+
+
+    return {'value': kp_transformed, 'normed': kp_normed}         
+    
+        
 def get_rotation_matrix(yaw, pitch, roll):
     yaw = yaw / 180 * 3.14
     pitch = pitch / 180 * 3.14
@@ -194,63 +208,38 @@ def get_rotation_matrix(yaw, pitch, roll):
 
     return rot_mat
 
-def tf_keypoint_transformation(kp_canonical, tf_kp_canonical, he):
-    kp = kp_canonical['value']    # (bs, k, 3)
-    kp = kp.view(len(kp), -1, 3)
-    yaw, pitch, roll = torch.tensor(he['yaw']), torch.tensor(he['pitch']), torch.tensor(he['roll'])
-    t, exp = torch.tensor(he['t']), torch.tensor(he['exp'])
-    exp = tf_kp_canonical['exp'].view(len(kp), -1, 3)
-    kp = kp + exp
 
-    yaw = headpose_pred_to_degree(yaw)
-    pitch = headpose_pred_to_degree(pitch)
-    roll = headpose_pred_to_degree(roll)
-
-    rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
+# def keypoint_transformation(kp_canonical, he, estimate_jacobian=True):
+#     kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
+#     yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
+#     t, exp = he['t'], he['tf_exp']
     
-    # keypoint rotation
-    kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
+#     exp = exp.view(exp.shape[0], -1, 3)
 
-    # keypoint translation
-    t = t.unsqueeze_(1).repeat(1, kp.shape[1], 1)
-    kp_t = kp_rotated + t
-
-    kp_transformed = kp_t
-
-    return {'value': kp_transformed}
-
-
-def keypoint_transformation(kp_canonical, he, estimate_jacobian=True):
-    kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
-    yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
-    t, exp = he['t'], he['tf_exp']
-    
-    exp = exp.view(exp.shape[0], -1, 3)
-
-    kp = kp + exp
+#     kp = kp + exp
         
-    yaw = headpose_pred_to_degree(yaw)
-    pitch = headpose_pred_to_degree(pitch)
-    roll = headpose_pred_to_degree(roll)
+#     yaw = headpose_pred_to_degree(yaw)
+#     pitch = headpose_pred_to_degree(pitch)
+#     roll = headpose_pred_to_degree(roll)
 
-    rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
+#     rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
     
-    # keypoint rotation
-    kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
+#     # keypoint rotation
+#     kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
 
-    # keypoint translation
-    t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
-    kp_t = kp_rotated + t
+#     # keypoint translation
+#     t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
+#     kp_t = kp_rotated + t
 
-    kp_transformed = kp_t
+#     kp_transformed = kp_t
 
-    if estimate_jacobian:
-        jacobian = kp_canonical['jacobian']   # (bs, k ,3, 3)
-        jacobian_transformed = torch.einsum('bmp,bkps->bkms', rot_mat, jacobian)
-    else:
-        jacobian_transformed = None
+#     if estimate_jacobian:
+#         jacobian = kp_canonical['jacobian']   # (bs, k ,3, 3)
+#         jacobian_transformed = torch.einsum('bmp,bkps->bkms', rot_mat, jacobian)
+#     else:
+#         jacobian_transformed = None
 
-    return {'value': kp_transformed, 'jacobian': jacobian_transformed}
+#     return {'value': kp_transformed, 'jacobian': jacobian_transformed}
 
 class GeneratorFullModelWithRefHe(torch.nn.Module):
     """
@@ -1280,18 +1269,21 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
-            tf_output = self.exp_transformer(he_source['out'], he_driving['out'])
+            source_mesh = x['source_mesh']
+            driving_mesh = x['driving_mesh']
+            
+            tf_output = self.exp_transformer(source_mesh, driving_mesh)
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
-            he_source['tf_exp'] = src_exp
-            he_driving['tf_exp'] = drv_exp
+            source_mesh['exp'] = src_exp
+            driving_mesh['exp'] = drv_exp
 
 
             # {'value': value, 'jacobian': jacobian}
-            kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
-            kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
+            kp_source = keypoint_transformation(kp_canonical, source_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
 
             kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
             kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']

@@ -42,7 +42,6 @@ model_params:
     num_layer: 1
     num_heads: 256
     code_dim: 1
-    input_dim: 2048
   generator_params:
     block_expansion: 64
     max_features: 512

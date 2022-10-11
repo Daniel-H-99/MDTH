@@ -2,7 +2,6 @@ import numpy as np
 import cv2
 from skimage import io
 from matplotlib import pyplot as plt
-import face_alignment
 import argparse
 import os
 import torch
@@ -10,7 +9,6 @@ import torch.nn.functional as F
 import yaml 
 import imageio
 import numpy as np
-import face_alignment
 import argparse
 import yaml
 import time
@@ -579,10 +577,14 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
     driving_video = []
+    fids = []
     for frame_path in driving_frames_path:
         driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
         driving_video.append(driving_frame)
-    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video])).permute(0, 3, 1, 2).float()
+        fid = int(frame_path.split('.png')[0])
+        fids.append(fid)
+    order = torch.tensor(fids).argsort()
+    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))[order].permute(0, 3, 1, 2).float()
 
     # section_indices = []
     # sections_indices_splitted = []

@@ -1237,10 +1237,10 @@ class DiscriminatorFullModel(torch.nn.Module):
 class ExpTransformerTrainer(GeneratorFullModelWithSeg):
     def __init__(self, stage, exp_transformer, kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=True, device_ids=[0]):
         super(ExpTransformerTrainer, self).__init__(kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=estimate_jacobian)
-        # self.eval()
-        # for p in self.parameters():
-        #     p.requires_grad = False
-        self.train()
+        self.eval()
+        for p in self.parameters():
+            p.requires_grad = False
+        # self.train()
         
         self.exp_transformer = exp_transformer
         self.stage = stage
@@ -1339,9 +1339,10 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
                 cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
                 src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
-                
-                he_source_cycled = {'yaw': he_source['yaw'], 'pitch': he_source['pitch'], 'roll': he_source['roll'], 't': he_source['t'], 'tf_exp': src_exp_cycled}
-                kp_source_cycled = keypoint_transformation(kp_canonical, he_source_cycled)
+
+                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'exp': src_exp_cycled}
+ 
+                kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 
                 generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):
@@ -1528,7 +1529,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['headpose'] = self.loss_weights['headpose'] * value
 
             if self.loss_weights['expression'] != 0:
-                value = torch.norm(he_driving['tf_exp'], p=1, dim=-1).mean()
+                value = torch.norm(driving_mesh['exp'], p=1, dim=-1).mean()
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
         elif self.stage == 2:

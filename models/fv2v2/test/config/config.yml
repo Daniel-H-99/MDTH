@@ -15,14 +15,14 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/img_mesh_logloss 10_10_22_08.01.33/img_mesh_logloss.yaml'
             kp_extractor:
-                model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/img_mesh_logloss 10_10_22_08.01.33/img_mesh_logloss.yaml'
+                model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000079-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/img_mesh_logloss.yaml'   
             generator:
-                model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/img_mesh_logloss 10_10_22_08.01.33/img_mesh_logloss.yaml'        
+                model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000079-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/img_mesh_logloss.yaml'          
             exp_transformer:
-                model: '@checkpoint_path/MDTH/img_mesh_logloss 10_10_22_08.01.33/00000349-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/img_mesh_logloss 10_10_22_08.01.33/img_mesh_logloss.yaml'            
+                model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000084-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/img_mesh_logloss.yaml'            
         attr:
             fps: 30
     preprocess:
@@ -56,7 +56,7 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/pair_hetero.txt'
-    label: 'img_mesh_logloss_349_heter_driving_code'
+    label: 'img_mesh_logloss_084_heter_driving_code'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

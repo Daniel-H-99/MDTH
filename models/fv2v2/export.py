@@ -448,38 +448,18 @@ def get_rotation_matrix(yaw, pitch, roll):
     return rot_mat
 
 
-def keypoint_transformation(kp_canonical, he, estimate_jacobian=False):
-    kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
-    yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
-    t, exp = he['t'], he['tf_exp']
+def keypoint_transformation(kp_canonical, mesh):
+    device = kp_canonical['value'].device
     
-    exp = exp.view(exp.shape[0], -1, 3)
+    kp_normed = kp_canonical['value'] + mesh['exp']
 
-    kp = kp + exp
-        
-    yaw = headpose_pred_to_degree(yaw)
-    pitch = headpose_pred_to_degree(pitch)
-    roll = headpose_pred_to_degree(roll)
+    tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['U']) # B x N x 4
+    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    kp_transformed = tmp # B x N x 3
 
-    rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
-    
-    # keypoint rotation
-    kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
 
-    # keypoint translation
-    t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
-    kp_t = kp_rotated + t
-
-    kp_transformed = kp_t
-
-    if estimate_jacobian:
-        jacobian = kp_canonical['jacobian']   # (bs, k ,3, 3)
-        jacobian_transformed = torch.einsum('bmp,bkps->bkms', rot_mat, jacobian)
-    else:
-        jacobian_transformed = None
-
-    return {'value': kp_transformed, 'jacobian': jacobian_transformed}
-
+    return {'value': kp_transformed, 'normed': kp_normed}   
 
 def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, kp_extractor, he_estimator, use_transformer=True, extract_driving_code=False, que=None):
     # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
@@ -506,32 +486,35 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
         kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
         he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
-        
+
+        _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
+
         for frame_idx in tqdm(range(0, len(driving_meshes), bs)):
             driving_frame = driving_video[frame_idx:frame_idx+bs].to(device)
-
+            _driving_mesh = preprocess_dict(driving_meshes[frame_idx:frame_idx+bs], device=device)
             if len(driving_frame) < bs:
+                _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
                 kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
-                he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+                # he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
 
-            he_driving = he_estimator(driving_frame)      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # he_driving = he_estimator(driving_frame)      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
-            tf_output = exp_transformer(he_source['out'], he_driving['out'])
+            tf_output = exp_transformer(_source_mesh['value'], _driving_mesh['value'])
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
-            he_source['tf_exp'] = src_exp
-            he_driving['tf_exp'] = drv_exp
+            _source_mesh['exp'] = src_exp
+            _driving_mesh['exp'] = drv_exp
             
             driving_codes.append(tf_output['drv_embedding']['exp_code'].detach().cpu().numpy())
 
             # {'value': value, 'jacobian': jacobian}
-            kp_source = keypoint_transformation(kp_canonical, he_source)
-            kp_driving = keypoint_transformation(kp_canonical, he_driving)
+            kp_source = keypoint_transformation(kp_canonical, _source_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
             
             kp_norm = kp_driving
 

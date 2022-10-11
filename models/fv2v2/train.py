@@ -18,20 +18,29 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     train_params = config['train_params']
 
     optimizer = torch.optim.Adam(exp_transformer.parameters(), lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
-    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
 
-    Logger.load_cpk(checkpoint_ref, generator=generator, kp_detector=kp_detector, he_estimator=he_estimator)
+    # optimizer_generator = torch.optim.Adam(generator.parameters(), lr=train_params['lr_generator'], betas=(0.5, 0.999))
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
+    # optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
+
+    if checkpoint_ref is not None:
+        Logger.load_cpk(checkpoint_ref, generator=generator, kp_detector=kp_detector)
 
     if checkpoint is not None:
-        start_epoch = Logger.load_cpk(checkpoint, discriminator=discriminator, exp_transformer=exp_transformer, optimizer_exp_transformer=optimizer, optimizer_discriminator=optimizer_discriminator)
+        start_epoch = Logger.load_cpk(checkpoint, generator=generator, discriminator=discriminator, kp_detector=kp_detector, exp_transformer=exp_transformer, optimizer_generator=optimizer_generator, optimizer_exp_transformer=optimizer, optimizer_discriminator=optimizer_discriminator)
     else:
         start_epoch = 0
 
     # print(f'start epoch: {start_epoch}')
     scheduler = MultiStepLR(optimizer, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
-    scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
+
+    scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
+    scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
+                                          last_epoch=start_epoch - 1)
+    # scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, train_params['epoch_milestones'], gamma=0.1,
+                                        # last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
@@ -83,7 +92,11 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-
+                optimizer_generator.step()
+                optimizer_generator.zero_grad()
+                optimizer_kp_detector.step()
+                optimizer_kp_detector.zero_grad()
+                
                 if train_params['loss_weights']['generator_gan'] != 0:
                     optimizer_discriminator.zero_grad()
                     losses_discriminator = discriminator_full(x, generated)
@@ -101,7 +114,10 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 logger.log_iter(losses=losses)
 
             scheduler.step()
+            # scheduler_generator.step()
             scheduler_discriminator.step()
+            # scheduler_kp_detector.step()
+            
             cache_log = f'cache hit ratio : {num_cache_hit / num_item_call * 100:.2f} %'
             print(cache_log)
             
@@ -110,8 +126,12 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 losses_generator, generated = trainer(x, cycled_drive=True)
 
             logger.log_epoch(epoch, {'exp_transformer': exp_transformer, 
+            'generator': generator,
             'discriminator': discriminator,
+            'kp_detector': kp_detector,
             'optimizer_exp_transformer': optimizer,
+            'optmizer_generator': optimizer_generator,
+            'optimizer_kp_detector': optimizer_kp_detector,
             'optimizer_discriminator': optimizer_discriminator}, inp=x, out=generated)
 
 def train_baseline(config, generator, discriminator, kp_detector, he_estimator, checkpoint, log_dir, dataset, device_ids, checkpoint_ref=None, he_estimator_ref=None):
@@ -281,8 +301,8 @@ def train_geo(config, generator, discriminator, kp_detector, he_estimator, check
         optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
     else:
         optimizer_discriminator = None
-    # optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
-    # optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_he_estimator'], betas=(0.5, 0.999))
+    optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
+    optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_he_estimator'], betas=(0.5, 0.999))
 
     if checkpoint is not None:
         start_epoch = Logger.load_cpk(checkpoint, generator, discriminator, None, None, None, 
@@ -296,10 +316,10 @@ def train_geo(config, generator, discriminator, kp_detector, he_estimator, check
     if discriminator is not None:
         scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
                                             last_epoch=start_epoch - 1)
-    # scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, train_params['epoch_milestones'], gamma=0.1,
-    #                                     last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
-    # scheduler_he_estimator = MultiStepLR(optimizer_he_estimator, train_params['epoch_milestones'], gamma=0.1,
-    #                                     last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
+    scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, train_params['epoch_milestones'], gamma=0.1,
+                                        last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
+    scheduler_he_estimator = MultiStepLR(optimizer_he_estimator, train_params['epoch_milestones'], gamma=0.1,
+                                        last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
@@ -350,10 +370,10 @@ def train_geo(config, generator, discriminator, kp_detector, he_estimator, check
                 if discriminator is not None:
                     optimizer_discriminator.zero_grad()
                 optimizer_generator.zero_grad()
-                # optimizer_kp_detector.step()
-                # optimizer_kp_detector.zero_grad()
-                # optimizer_he_estimator.step()
-                # optimizer_he_estimator.zero_grad()
+                optimizer_kp_detector.step()
+                optimizer_kp_detector.zero_grad()
+                optimizer_he_estimator.step()
+                optimizer_he_estimator.zero_grad()
 
                 if train_params['loss_weights']['generator_gan'] != 0:
                     optimizer_discriminator.zero_grad()
@@ -375,11 +395,11 @@ def train_geo(config, generator, discriminator, kp_detector, he_estimator, check
             scheduler_generator.step()
             if discriminator is not None:
                 scheduler_discriminator.step()
-            # scheduler_kp_detector.step()
-            # scheduler_he_estimator.step()
+            scheduler_kp_detector.step()
+            scheduler_he_estimator.step()
             # print(f'generated keys: {generated.keys()}')
             # cache_log = f'cache hit ratio : {num_cache_hit / num_item_call * 100:.2f} %'
-            # print(cache_log)
+            print(cache_log)
 
             if discriminator is not None:
                 logger.log_epoch(epoch, {'generator': generator,

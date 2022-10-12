@@ -49,10 +49,11 @@ config:
             dir: '@res_path'
 dynamic:
     gpus: [0]
-    mode: 'pair'
+    mode: 'combination'
     input_as_file: True
     inputs:
-        pair: 'inputs/pair_hetero.txt'
+        source: 'inputs/source.txt'
+        driving: 'inputs/driving.txt'
     label: 'local_mesh_hidden_hetero'
     rewrite: False
     use_transformer: False

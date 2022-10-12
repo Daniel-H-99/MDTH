@@ -1,7 +1,6 @@
-mead_samples/emotion_faces/ang_001.png,young_v2/00003_cropped.mp4
-mead_samples/emotion_faces/neutral_001.png,young_v2/00003_cropped.mp4
-m2m/img/00003.png,young_v2/00003_cropped.mp4
-m2m/img/00004.png,young_v2/00003_cropped.mp4
-m2m/img/00003.png,mead_samples/ang_001.mp4
+m2m/img/00003.png,mead_samples/neutral_001.mp4
 m2m/img/00004.png,mead_samples/ang_001.mp4
 young_v2/00015.png,mead_samples/ang_001.mp4
+celeb/E_00001_cropped.png/ang_001.mp4
+celeb/E_00002_cropped.png/ang_001.mp4
+celeb/W_00006_cropped.png/ang_001.mp4

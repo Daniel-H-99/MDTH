@@ -224,7 +224,7 @@ class OcclusionAwareSPADEGenerator(nn.Module):
             dense_motion = self.dense_motion_network(feature=feature_3d, kp_driving=kp_driving,
                                                      kp_source=kp_source)
             output_dict['mask'] = dense_motion['mask']
-
+            output_dict['deformation'] = dense_motion['deformation']
             if 'occlusion_map' in dense_motion:
                 occlusion_map = dense_motion['occlusion_map']
                 output_dict['occlusion_map'] = occlusion_map

@@ -70,7 +70,7 @@ class Logger:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])
 
         if optimizer_generator is not None:
-            optimizer_generator.load_state_dict(checkpoint['optmizer_generator'])
+            optimizer_generator.load_state_dict(checkpoint['optimizer_generator'])
         if optimizer_discriminator is not None:
             try:
                 optimizer_discriminator.load_state_dict(checkpoint['optimizer_discriminator'])
@@ -209,32 +209,32 @@ class Visualizer:
             images.append((prediction, kp_driving))
 
 
-        # ## Occlusion map
-        # if 'occlusion_map' in out:
-        #     occlusion_map = out['occlusion_map'].data.cpu().repeat(1, 3, 1, 1)
-        #     occlusion_map = F.interpolate(occlusion_map, size=source.shape[1:3]).numpy()
-        #     occlusion_map = np.transpose(occlusion_map, [0, 2, 3, 1])
-        #     images.append(occlusion_map)
+        ## Occlusion map
+        if 'occlusion_map' in out:
+            occlusion_map = out['occlusion_map'].data.cpu().repeat(1, 3, 1, 1)
+            occlusion_map = F.interpolate(occlusion_map, size=source.shape[1:3]).numpy()
+            occlusion_map = np.transpose(occlusion_map, [0, 2, 3, 1])
+            images.append(occlusion_map)
         
-        # ## Mask
-        # if 'mask' in out:
-        #     for i in range(out['mask'].shape[1]):
-        #         mask = out['mask'][:, i:(i+1)].data.cpu().sum(2).repeat(1, 3, 1, 1)    # (n, 3, h, w)
-        #         # mask = F.softmax(mask.view(mask.shape[0], mask.shape[1], -1), dim=2).view(mask.shape)
-        #         mask = F.interpolate(mask, size=source.shape[1:3]).numpy()
-        #         mask = np.transpose(mask, [0, 2, 3, 1])
+        ## Mask
+        if 'mask' in out:
+            for i in range(out['mask'].shape[1]):
+                mask = out['mask'][:, i:(i+1)].data.cpu().sum(2).repeat(1, 3, 1, 1)    # (n, 3, h, w)
+                # mask = F.softmax(mask.view(mask.shape[0], mask.shape[1], -1), dim=2).view(mask.shape)
+                mask = F.interpolate(mask, size=source.shape[1:3]).numpy()
+                mask = np.transpose(mask, [0, 2, 3, 1])
 
-        #         if i != 0:
-        #             color = np.array(self.colormap((i - 1) / (out['mask'].shape[1] - 1)))[:3]
-        #         else:
-        #             color = np.array((0, 0, 0))
+                if i != 0:
+                    color = np.array(self.colormap((i - 1) / (out['mask'].shape[1] - 1)))[:3]
+                else:
+                    color = np.array((0, 0, 0))
 
-        #         color = color.reshape((1, 1, 1, 3))
+                color = color.reshape((1, 1, 1, 3))
                 
-        #         if i != 0:
-        #             images.append(mask * color)
-        #         else:
-        #             images.append(mask)
+                if i != 0:
+                    images.append(mask * color)
+                else:
+                    images.append(mask)
 
         image = self.create_image_grid(*images)
         image = (255 * image).astype(np.uint8)

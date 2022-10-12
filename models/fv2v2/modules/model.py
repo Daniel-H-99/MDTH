@@ -1237,22 +1237,27 @@ class DiscriminatorFullModel(torch.nn.Module):
 class ExpTransformerTrainer(GeneratorFullModelWithSeg):
     def __init__(self, stage, exp_transformer, kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=True, device_ids=[0]):
         super(ExpTransformerTrainer, self).__init__(kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=estimate_jacobian)
-        # self.eval()
-        # for p in self.parameters():
-        #     p.requires_grad = False
-        self.train()
+        self.eval()
+        for p in self.parameters():
+            p.requires_grad = False
+        # self.train()
         
         self.exp_transformer = exp_transformer
         
         exp_transformer.train()
         
-        # discriminator.train()
-        # for p in discriminator.parameters():
-        #     p.requires_grad = True
+        discriminator.train()
+        for p in discriminator.parameters():
+            p.requires_grad = True
 
-        # he_estimator.train()
-        # for p in he_estimator.parameters():
-        #     p.requires_grad = True
+        generator.train()
+        for p in generator.parameters():
+            p.requires_grad = True
+
+
+        he_estimator.train()
+        for p in he_estimator.parameters():
+            p.requires_grad = True
 
         self.stage = stage
 
@@ -1289,8 +1294,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh['exp'] = src_exp
             driving_mesh['exp'] = drv_exp
 
-            kp_canonical = tf_output['kp']
-            
+            kp_canonical = {'value': tf_output['kp']}
+
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
             kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
@@ -1729,8 +1734,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             if self.loss_weights['keypoint'] != 0:
                 # print(kp_driving['value'].shape)     # (bs, k, 3)
                 value_total = 0
-                for i in range(kp_driving['value'].shape[1]):
-                    for j in range(kp_driving['value'].shape[1]):
+                for i in range(kp_canonical['value'].shape[1]):
+                    for j in range(kp_canonical['value'].shape[1]):
                         dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
                         dist = 0.1 - dist      # set Dt = 0.1
                         dd = torch.gt(dist, 0) 

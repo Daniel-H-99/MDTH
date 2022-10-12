@@ -1237,19 +1237,26 @@ class DiscriminatorFullModel(torch.nn.Module):
 class ExpTransformerTrainer(GeneratorFullModelWithSeg):
     def __init__(self, stage, exp_transformer, kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=True, device_ids=[0]):
         super(ExpTransformerTrainer, self).__init__(kp_extractor, he_estimator, generator, discriminator, train_params, estimate_jacobian=estimate_jacobian)
-        self.eval()
-        for p in self.parameters():
-            p.requires_grad = False
-        # self.train()
+        # self.eval()
+        # for p in self.parameters():
+        #     p.requires_grad = False
+        self.train()
         
         self.exp_transformer = exp_transformer
-        self.stage = stage
         
         exp_transformer.train()
-        discriminator.train()
-        for p in discriminator.parameters():
-            p.requires_grad = True
         
+        # discriminator.train()
+        # for p in discriminator.parameters():
+        #     p.requires_grad = True
+
+        # he_estimator.train()
+        # for p in he_estimator.parameters():
+        #     p.requires_grad = True
+
+        self.stage = stage
+
+
         # self.sections = train_params['sections']
         # self.split_ids = [sec[1] for sec in self.sections]
 
@@ -1266,7 +1273,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             bs = len(x['source'])
             
-            kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
+            # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
             he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
@@ -1274,7 +1281,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
             
-            tf_output = self.exp_transformer(source_mesh['value'], driving_mesh['value'])
+            tf_output = self.exp_transformer(he_source['out'], he_driving['out'])
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
@@ -1282,7 +1289,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh['exp'] = src_exp
             driving_mesh['exp'] = drv_exp
 
-
+            kp_canonical = tf_output['kp']
+            
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
             kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
@@ -1358,15 +1366,17 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
                 loss_values['log'] = self.loss_weights['log'] * (self.log_loss(greater_labels) + self.log_loss(-less_labels))
 
+            # if self.loss_weight['l1'] != 0:
+
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3
                 motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w
-                it_section = kp_driving['raw_value'] # B x N x 3
-                motion_GT = kp_source['raw_value'] # B x N x 3
-                it_section_eye = it_section[:, kp_source['MP_EYE_SECTIONS'][0].long()]
-                motion_GT_eye = motion_GT[:, kp_source['MP_EYE_SECTIONS'][0].long()]
-                it_section_mouth = it_section[:, kp_source['MP_MOUTH_SECTIONS'][0].long()]
-                motion_GT_mouth = motion_GT[:, kp_source['MP_MOUTH_SECTIONS'][0].long()]
+                it_section = driving_mesh['raw_value'] # B x N x 3
+                motion_GT = source_mesh['raw_value'] # B x N x 3
+                it_section_eye = it_section[:, source_mesh['MP_EYE_SECTIONS'][0].long()]
+                motion_GT_eye = motion_GT[:, source_mesh['MP_EYE_SECTIONS'][0].long()]
+                it_section_mouth = it_section[:, source_mesh['MP_MOUTH_SECTIONS'][0].long()]
+                motion_GT_mouth = motion_GT[:, source_mesh['MP_MOUTH_SECTIONS'][0].long()]
                 # print(f'it section shape: {it_section.shape}')
                 # print(f'motion_GT section shape: {motion_GT.shape}')
                 # print(f'motion shape: {motion.shape}')
@@ -1385,7 +1395,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'motion_section_GT : {motion_GT}')
                 
                 loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
-                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
+                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
                                                 + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
             if np.array(self.loss_weights['localized']).sum() != 0:

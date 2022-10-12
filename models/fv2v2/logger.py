@@ -70,7 +70,7 @@ class Logger:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])
 
         if optimizer_generator is not None:
-            optimizer_generator.load_state_dict(checkpoint['optimizer_generator'])
+            optimizer_generator.load_state_dict(checkpoint['optmizer_generator'])
         if optimizer_discriminator is not None:
             try:
                 optimizer_discriminator.load_state_dict(checkpoint['optimizer_discriminator'])

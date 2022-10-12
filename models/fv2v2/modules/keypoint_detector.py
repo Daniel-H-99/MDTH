@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, MeshEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree
+from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree
 
 class KPDetector(nn.Module):
     """
@@ -159,18 +159,77 @@ class ImageEncoder(nn.Module):
 
         return out
 
+# class KPDetectorGeo(nn.Module):
+#     """
+#     Detecting canonical keypoints. Return keypoint position and jacobian near each keypoint.
+#     """
+
+#     def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, reshape_channel, reshape_depth,
+#                  num_blocks, temperature, estimate_jacobian=False, scale_factor=1, single_jacobian_map=False):
+#         super(KPDetector, self).__init__()
+
+#         self.Encoder = MeshEncoder()
+#         # self.kp = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_kp, kernel_size=7, padding=3)
+
+
+#     def gaussian2kp(self, heatmap):
+#         """
+#         Extract the mean from a heatmap
+#         """
+#         shape = heatmap.shape
+#         heatmap = heatmap.unsqueeze(-1)
+#         grid = make_coordinate_grid(shape[2:], heatmap.type()).unsqueeze_(0).unsqueeze_(0)
+#         value = (heatmap * grid).sum(dim=(2, 3, 4))
+#         kp = {'value': value}
+
+#         return kp
+
+#     def forward(self, x):
+#         if self.scale_factor != 1:
+#             x = self.down(x)
+
+#         feature_map = self.predictor(x)
+#         prediction = self.kp(feature_map)
+
+#         final_shape = prediction.shape
+#         heatmap = prediction.view(final_shape[0], final_shape[1], -1)
+#         heatmap = F.softmax(heatmap / self.temperature, dim=2)
+#         heatmap = heatmap.view(*final_shape)
+
+#         out = self.gaussian2kp(heatmap)
+
+#         if self.jacobian is not None:
+#             jacobian_map = self.jacobian(feature_map)
+#             jacobian_map = jacobian_map.reshape(final_shape[0], self.num_jacobian_maps, 9, final_shape[2],
+#                                                 final_shape[3], final_shape[4])
+#             heatmap = heatmap.unsqueeze(2)
+
+#             jacobian = heatmap * jacobian_map
+#             jacobian = jacobian.view(final_shape[0], final_shape[1], 9, -1)
+#             jacobian = jacobian.sum(dim=-1)
+#             jacobian = jacobian.view(jacobian.shape[0], jacobian.shape[1], 3, 3)
+#             out['jacobian'] = jacobian
+
+#         return out
+
 class ExpTransformer(nn.Module):
     """
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_heads = num_heads
         self.code_dim = code_dim
         self.num_kp = num_kp
+        self.input_dim = input_dim
         self.latent_dim = latent_dim
-        self.encoder = MeshEncoder(latent_dim=self.latent_dim, num_kp=self.num_kp)
+        self.encoder = LinearEncoder(latent_dim=self.latent_dim, input_dim=self.input_dim)
+        self.kp_encoder = LinearEncoder(latent_dim=self.latent_dim, input_dim=self.input_dim)
+        self.kp_decoder = nn.Sequential(
+            nn.Linear(self.latent_dim, self.num_kp * 3),
+            nn.Tanh()
+        )
         # self.encoder = ImageEncoder(block_expansion, feature_channel, num_kp, image_channel, max_features)
 
         # self.fc_roll = nn.Linear(2048, num_bins)
@@ -232,6 +291,13 @@ class ExpTransformer(nn.Module):
         embedding = self.encoder(img)
         return self.split_embedding(embedding)
 
+    def kp_encode(self, x):
+        embedding = F.leaky_relu(self.kp_encoder(x), 0.2)
+        return embedding
+
+    def kp_decode(self, x):
+        return self.kp_decoder(x).view(-1, self.num_kp, 3)
+        
     def decode(self, embedding):
         res = {}
         if 'id' in embedding:
@@ -247,7 +313,10 @@ class ExpTransformer(nn.Module):
         src_output = self.decode(src_embedding)
         drv_output = self.decode({'style': src_embedding['style'], 'exp': drv_embedding['exp']})
     
-        return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding}
+        kp_embedding = self.kp_encode(src)
+        kp_output = self.kp_decode(kp_embedding)
+
+        return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding, 'kp': kp_output, 'kp_embedding': kp_embedding}
 
 class HEEstimator(nn.Module):
     """
@@ -342,15 +411,15 @@ class HEEstimator(nn.Module):
         t = self.fc_t(out)
         exp = self.fc_exp(out)
 
-        yaw = headpose_pred_to_degree(yaw)
-        pitch = headpose_pred_to_degree(pitch)
-        roll = headpose_pred_to_degree(roll)
+        _yaw = headpose_pred_to_degree(yaw)
+        _pitch = headpose_pred_to_degree(pitch)
+        _roll = headpose_pred_to_degree(roll)
 
 
-        R = get_rotation_matrix(yaw, pitch, roll)
+        R = get_rotation_matrix(_yaw, _pitch, _roll)
         
         # t = torch.cat([t[:, [0]], -t[:, [1]], t[:, [2]]], dim=1)
         # t = t[:, [1, 0, 2]]
         
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'R': R}
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'R': R, 'out': out}
 

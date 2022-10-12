@@ -34,7 +34,9 @@ if __name__ == "__main__":
     parser.add_argument("--gen", default="spade", choices=["original", "spade"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
-    parser.add_argument("--checkpoint_ref", default='/mnt/hdd/minyeong_workspace/checkpoints/fv2v/00000189-checkpoint.pth.tar', help="path to checkpoint to restore")
+    # parser.add_argument("--checkpoint_ref", default='/home/server19/minyeong_workspace/MDTH/models/fv2v2/log/img_mesh_logloss 11_10_22_09.07.39/last.tar', help="path to checkpoint to restore")
+    parser.add_argument("--checkpoint_ref", default=None, help="path to checkpoint to restore")
+    
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
                         help="Names of the devices comma separated.")
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Print model architecture")

@@ -1295,17 +1295,21 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             tf_output = self.exp_transformer({'img': x['source'], 'mesh': source_mesh['value']}, {'img': x['driving'], 'mesh': driving_mesh['value']})
 
-            src_exp = tf_output['src_exp']
-            drv_exp = tf_output['drv_exp']
+            # src_exp = tf_output['src_exp']
+            # drv_exp = tf_output['drv_exp']
 
+            src_exp = 0
+            drv_exp = 0
+            
             source_mesh['exp'] = src_exp
             driving_mesh['exp'] = drv_exp
 
-            kp_canonical = {'value': tf_output['kp']}
-
+            kp_canonical = {'value': tf_output['kp_src']}
+            kp_canonical_driving = {'value': tf_output['kp_drv']}
             # {'value': value, 'jacobian': jacobian}
+
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
+            kp_driving = keypoint_transformation(kp_canonical_driving, driving_mesh)
 
             kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
             kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
@@ -1362,15 +1366,15 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             if cycled_drive:
                 ## cycled expression drive
-                src_style = tf_output['src_embedding']['style']
-                src_exp_code_decoded = tf_output['drv_embedding']['exp']
-                src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
-                cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
-                src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
+                # src_style = tf_output['src_embedding']['style']
+                # src_exp_code_decoded = tf_output['drv_embedding']['exp']
+                # src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
+                # cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
+                # src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
 
-                source_mesh_cycled = {'U': torch.cat([driving_mesh['U'][1:], driving_mesh['U'][[0]]], dim=0), 'scale': torch.cat([driving_mesh['scale'][1:], driving_mesh['scale'][[0]]], dim=0), 'exp': src_exp_cycled}
+                # source_mesh_cycled = {'U': torch.cat([driving_mesh['U'][1:], driving_mesh['U'][[0]]], dim=0), 'scale': torch.cat([driving_mesh['scale'][1:], driving_mesh['scale'][[0]]], dim=0), 'exp': src_exp_cycled}
  
-                kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
+                kp_source_cycled = {'value': torch.cat([kp_driving['value'][1:], kp_driving['value'][[0]]], dim=0)}
 
                 generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):

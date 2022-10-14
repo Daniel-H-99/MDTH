@@ -10,6 +10,7 @@ import face_alignment
 import os
 import mediapipe as mp
 from utils.ffhq_align import image_align
+from utils.util import euler2matrix, matrix2euler
 import imageio
 from tqdm import tqdm
 from skimage.transform import resize
@@ -263,7 +264,7 @@ class LandmarkModel():
         frame_landmarks = np.stack([frame_landmarks[:, 0].clip(0, H - 1), frame_landmarks[:, 1].clip(0, W - 1)], axis=1)
         return (bb, frame_landmarks)
 
-    def normalize_mesh(self, landmarks, image_height, image_width, z_mean=None):
+    def normalize_mesh(self, landmarks, image_height, image_width, z_mean=None, R_noise=None, t_noise=None):
         eos_landmarks = []
         # print(f'landmarks: {landmarks}')
         # print(f'image size: {image_height}, {image_width}')
@@ -282,6 +283,24 @@ class LandmarkModel():
                             [0, 0, 0, 1]])
         proj = pose.get_projection()
         view = pose.get_modelview()
+        # if R_noise is not None:
+        #     noise_euler = R_noise * np.pi * (2 * np.random.rand(3) - 1)
+        #     noise_matrix = euler2matrix(noise_euler)
+        #     view[:3, :3] = noise_matrix @ view[:3, :3]
+        # if t_noise is not None:
+        #     viewport[:3, 3] += t_noise * (2 * np.random.rand(3) - 1)
+            
+        # if R_noise:
+        #     noise_euler = R_noise * np.pi * (2 * np.random.rand(3) - 1)
+        #     noise_matrix = euler2matrix(noise_euler)
+        #     view[:3, :3] = noise_matrix @ view[:3, :3]
+        
+        # if t_noise is not None:
+        #     viewport[:3, 3] += t_noise * (2 * np.random.rand(3) - 1)
+        # # print(f'view: {view}')
+        # print(f'view rot: {matrix2euler(view[:3, :3])}')
+        # while True:
+        #     continue
         proj[3, 3] = 1
         a = multiplyABC(viewport, proj, view)
         
@@ -290,10 +309,11 @@ class LandmarkModel():
         
         if z_mean is not None:
             z_bias = mesh_3d_points[:, 2].mean()
-            viewport = np.array([[w2, 0, 0, w2],
-                                [0, -h2, 0, h2],
-                                [0, 0, 1, -75 - z_bias],
-                                [0, 0, 0, 1]])
+            viewport[2, 3] = viewport[2, 3] - z_bias
+            # viewport = np.array([[w2, 0, 0, w2],
+            #                     [0, -h2, 0, h2],
+            #                     [0, 0, 1, -75 - z_bias],
+            #                     [0, 0, 0, 1]])
             a = multiplyABC(viewport, proj, view)
             
             a = a.transpose()

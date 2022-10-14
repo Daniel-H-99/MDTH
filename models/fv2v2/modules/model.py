@@ -1293,6 +1293,9 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
             
+            # driving_mesh['scale'] = source_mesh['scale']
+            # driving_mesh['U'] = np.source_mesh['U']
+            
             tf_output = self.exp_transformer({'img': x['source'], 'mesh': source_mesh['value']}, {'img': x['driving'], 'mesh': driving_mesh['value']})
 
             src_exp = tf_output['src_exp']

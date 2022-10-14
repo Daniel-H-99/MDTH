@@ -7,7 +7,8 @@ from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 from sync_batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
 
 import torch.nn.utils.spectral_norm as spectral_norm
-import re
+from torchvision import models
+
 
 def get_rotation_matrix(yaw, pitch, roll):
     yaw = yaw / 180 * 3.14
@@ -156,6 +157,27 @@ class LinearEncoder(nn.Module):
         return x
     
 
+def calc_mean_std(feat, eps=1e-5):
+    # eps is a small value added to the variance to avoid divide-by-zero.
+    size = feat.size()
+    assert (len(size) == 4)
+    N, C = size[:2]
+    feat_var = feat.view(N, C, -1).var(dim=2) + eps
+    feat_std = feat_var.sqrt().view(N, C, 1, 1)
+    feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+    return feat_mean, feat_std
+
+
+def adaptive_instance_normalization(content_feat, style_feat):
+    assert (content_feat.size()[:2] == style_feat.size()[:2])
+    size = content_feat.size()
+    style_mean, style_std = calc_mean_std(style_feat)
+    content_mean, content_std = calc_mean_std(content_feat)
+
+    normalized_feat = (content_feat - content_mean.expand(
+        size)) / content_std.expand(size)
+    return normalized_feat * style_std.expand(size) + style_mean.expand(size)
+
 class MeshEncoder(nn.Module):
     def __init__(self, latent_dim: int = 128, n_vertices: int = 68, num_kp: int = 478, mean=None, stddev=None):
         """
@@ -196,6 +218,85 @@ class MeshEncoder(nn.Module):
         x = self.code(x)
 
         return x
+    
+class ResnetEncoder(nn.Module):
+    def __init__(self):
+        super(ResnetEncoder, self).__init__()
+        image_channel = 3
+        block_expansion = 64
+        self.conv1 = nn.Conv2d(in_channels=image_channel, out_channels=block_expansion, kernel_size=7, padding=3, stride=2)
+        self.norm1 = BatchNorm2d(block_expansion, affine=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        self.conv2 = nn.Conv2d(in_channels=block_expansion, out_channels=256, kernel_size=1)
+        self.norm2 = BatchNorm2d(256, affine=True)
+
+        self.block1 = nn.Sequential()
+        for i in range(3):
+            self.block1.add_module('b1_'+ str(i), ResBottleneck(in_features=256, stride=1))
+
+        self.conv3 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=1)
+        self.norm3 = BatchNorm2d(512, affine=True)
+        self.block2 = ResBottleneck(in_features=512, stride=2)
+
+        self.block3 = nn.Sequential()
+        for i in range(3):
+            self.block3.add_module('b3_'+ str(i), ResBottleneck(in_features=512, stride=1))
+
+        self.conv4 = nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=1)
+        self.norm4 = BatchNorm2d(1024, affine=True)
+        self.block4 = ResBottleneck(in_features=1024, stride=2)
+
+        self.block5 = nn.Sequential()
+        for i in range(5):
+            self.block5.add_module('b5_'+ str(i), ResBottleneck(in_features=1024, stride=1))
+
+        self.conv5 = nn.Conv2d(in_channels=1024, out_channels=2048, kernel_size=1)
+        self.norm5 = BatchNorm2d(2048, affine=True)
+        self.block6 = ResBottleneck(in_features=2048, stride=2)
+
+        self.block7 = nn.Sequential()
+        for i in range(2):
+            self.block7.add_module('b7_'+ str(i), ResBottleneck(in_features=2048, stride=1))
+
+
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.norm1(out)
+        out = F.relu(out)
+        out = self.maxpool(out)
+
+        out = self.conv2(out)
+        out = self.norm2(out)
+        out = F.relu(out)
+
+        out = self.block1(out)
+
+        out = self.conv3(out)
+        out = self.norm3(out)
+        out = F.relu(out)
+        out = self.block2(out)
+
+        out = self.block3(out)
+
+        out = self.conv4(out)
+        out = self.norm4(out)
+        out = F.relu(out)
+        out = self.block4(out)
+
+        out = self.block5(out)
+
+        out = self.conv5(out)
+        out = self.norm5(out)
+        out = F.relu(out)
+        out = self.block6(out)
+
+        out = self.block7(out)
+
+        out = F.adaptive_avg_pool2d(out, 1)
+        out = out.view(out.shape[0], -1)
+
+        return out
 
 
 class conv_tsa(nn.Module):

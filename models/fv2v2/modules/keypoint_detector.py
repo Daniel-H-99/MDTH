@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree
+from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree, ResnetEncoder
 
 class KPDetector(nn.Module):
     """
@@ -224,12 +224,19 @@ class ExpTransformer(nn.Module):
         self.num_kp = num_kp
         self.input_dim = input_dim
         self.latent_dim = latent_dim
-        self.exp_encoder = LinearEncoder(latent_dim=self.latent_dim // 2, input_dim=self.input_dim)
-        self.id_encoder = LinearEncoder(latent_dim=self.latent_dim, input_dim=self.input_dim)
+
+        self.exp_encoder = nn.Sequential(
+            ResnetEncoder(),
+            nn.LeakyReLU(0.2),
+            nn.Linear(2048, self.latent_dim // 2)
+        )
+        
+        self.id_encoder = MeshEncoder(num_kp=self.num_kp, latent_dim=latent_dim)
         self.kp_decoder = nn.Sequential(
             nn.Linear(self.latent_dim, self.num_kp * 3),
             nn.Tanh()
         )
+        
         self.style_decoder = nn.Linear(self.latent_dim, self.latent_dim // 2)
 
         self.vq_exp = BiCategoricalEncodingLayer(self.latent_dim // 2, self.num_heads)
@@ -271,15 +278,15 @@ class ExpTransformer(nn.Module):
         output = self.fuser(input)
         return output
 
-    def encode(self, img):
-        exp_embedding = self.exp_encoder(img)
-        id_embedding = self.id_encoder(img)
+    def encode(self, x):
+        exp_embedding = self.exp_encoder(x['img'])
+        id_embedding = self.id_encoder(x['mesh'])
         
         exp_code = F.tanh(torch.einsum('bk,kp->bkp', self.vq_exp(exp_embedding), self.codebook_pre_scale).squeeze(2))  # B x num_heads
         exp_embedding = self.decode_exp_code(exp_code)
 
         kp = id_embedding
-        style = self.style_decoder(id_embedding)
+        style = F.normalize(self.style_decoder(id_embedding), dim=-1)
 
         return {'kp': kp, 'style': style, 'exp': exp_embedding, 'exp_code': exp_code}
 
@@ -293,9 +300,13 @@ class ExpTransformer(nn.Module):
     def decode(self, embedding):
         res = {}
         if 'kp' in embedding:
-            res['kp'] = self.kp_decoder(embedding['kp']).view(len(embedding['kp']), -1, 3)
+            res['kp'] = 2 * self.kp_decoder(embedding['kp']).view(len(embedding['kp']), -1, 3)
+            res['kp'][:, :, 2] = res['kp'][:, :, 2] - 0.33
         if 'style' in embedding and 'exp' in embedding:
             res['exp'] = self.exp_decoder(self.fuse(embedding['style'], embedding['exp'])).view(len(embedding['style']), -1, 3)
+            # random_flag = torch.rand(res['exp'].shape).to(res['exp'].device) >= 0.5
+            # noise = 0.1 * torch.rand(res['exp'].shape).to(res['exp'].device) * random_flag
+            # res['exp'] = res['exp'] + noise
         return res
 
     def forward(self, src, drv):

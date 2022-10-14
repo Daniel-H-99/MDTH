@@ -147,7 +147,7 @@ class FramesDataset3(Dataset):
         H, W = image.shape[:2]
         bb, lm = self.landmark_model.get_landmarks_fa(image)
         # lm[:, 1] = H - lm[:, 1]
-        lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W)
+        lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W, z_mean=0)
         # U = torch.from_numpy(U['U'])
         normalizer = U['normalizer']
         U = U['U']
@@ -168,9 +168,9 @@ class FramesDataset3(Dataset):
             noise_real = None
 
         lm_3d = lm_3d[:, :3]
-        # lm_3d[:, 1] = H - lm_3d[:, 1] 
+        # lm_3d[:, 1] = H - lm_3d[:, 1]
         scale = H // 2
-        lm_scaled_3d = lm_normed_3d / scale  
+        lm_scaled_3d = lm_normed_3d / scale
         mesh["raw_value"] = lm_3d
         mesh["value"] = lm_scaled_3d.astype(np.float32)
         mesh["U"] = U.astype(np.float32)
@@ -280,8 +280,8 @@ class FramesDataset3(Dataset):
                     mesh['MP_EYE_SECTIONS'] = LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX
                     mesh['MP_MOUTH_SECTIONS'] = OUT_LIP_IDX + IN_LIP_IDX
                     
-                    mesh['mesh_img_sec'] =  self.get_mesh_image_section(mesh_mp['raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG)
-                    mesh['_mesh_img_sec'] =  self.get_mesh_image_section(mesh_mp['_raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG)
+                    mesh['mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
+                    mesh['_mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['_raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
                     # mesh['raw_value'] = mesh_mp['raw_value'] * 2 / L + A
                     # mesh['_raw_value'] = mesh_mp['_raw_value'] * 2 / L + A
 
@@ -293,8 +293,12 @@ class FramesDataset3(Dataset):
                     # print(f'mouth image shape: {mesh["mouth_img"].shape}')
                     # mouth_center = mesh['raw_value'][-20:, :2].mean(dim=0) # 2
                     # mouth_corner = (mouth_center - np.array([[L // 4, L // 4]])).clip(min=0)
+                    # print(f"mp_raw_value: {mesh_mp['raw_value'][OUT_LIP_IDX] * 2 / L + A}")
+                    # print(f"raw_value: {mesh['raw_value'][48:] * 2 / L + A}")
+                    # print(f"value: {mesh['value'][48:]}")
+
                     mesh['raw_value'] = np.array(mesh_mp['raw_value'], dtype='float32') * 2 / L + A
-                    # print('raw value got')
+
                     # print('checkpoint 2')
                     # print(f'data type: {mesh["value"].dtype}')
                     meshes.append(mesh)

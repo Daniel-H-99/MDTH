@@ -175,9 +175,16 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
     kp_transformed = tmp # B x N x 3
+    
+    
+    kp_canonical = kp_canonical['value']
 
+    tmp = torch.cat([kp_canonical, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['U']) # B x N x 4
+    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    kp_canonical = tmp # B x N x 3
 
-    return {'value': kp_transformed, 'normed': kp_normed}         
+    return {'value': kp_transformed, 'normed': kp_normed, 'canonical': kp_canonical}         
     
         
 def get_rotation_matrix(yaw, pitch, roll):
@@ -390,10 +397,10 @@ class GeneratorFullModelWithRefHe(torch.nn.Module):
                     value = (dist * dd).mean()
                     value_total += value
 
-            kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
-            value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
+            # kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
+            # value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
 
-            value_total += value_depth
+            # value_total += value_depth
             loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
 
         if self.loss_weights['headpose'] != 0:
@@ -1255,9 +1262,9 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             p.requires_grad = True
 
 
-        he_estimator.train()
-        for p in he_estimator.parameters():
-            p.requires_grad = True
+        # he_estimator.train()
+        # for p in he_estimator.parameters():
+        #     p.requires_grad = True
 
         self.stage = stage
 
@@ -1280,13 +1287,13 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
-            he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
             
-            tf_output = self.exp_transformer(he_source['out'], he_driving['out'])
+            tf_output = self.exp_transformer({'img': x['source'], 'mesh': source_mesh['value']}, {'img': x['driving'], 'mesh': driving_mesh['value']})
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
@@ -1340,11 +1347,19 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
             
             # print('entering generator')
+            # print(f'kp_source value: {kp_source["value"]}')
+            # print(f'kp_driving value: {kp_driving["value"]}')
+            
             generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
             generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
-
+            
+            generated['source_kp_canonical'] = {'value': kp_source['canonical']}
+            generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
+            generated['source_mesh_image'] = kp_source['mesh_img_sec']
+            generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
+            
             if cycled_drive:
                 ## cycled expression drive
                 src_style = tf_output['src_embedding']['style']
@@ -1353,7 +1368,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
                 src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
 
-                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'exp': src_exp_cycled}
+                source_mesh_cycled = {'U': torch.cat([driving_mesh['U'][1:], driving_mesh['U'][[0]]], dim=0), 'scale': torch.cat([driving_mesh['scale'][1:], driving_mesh['scale'][[0]]], dim=0), 'exp': src_exp_cycled}
  
                 kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 
@@ -1362,6 +1377,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                     generated[f'{k}_cycled'] = v
                 generated['kp_driving_cycled'] = kp_source_cycled
                 
+
             if self.loss_weights['log'] != 0:
                 src_exp_code = tf_output['src_embedding']['exp_code']   # B x num_heads
                 drv_exp_code = tf_output['drv_embedding']['exp_code']   # B x num_heads
@@ -1371,7 +1387,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
                 loss_values['log'] = self.loss_weights['log'] * (self.log_loss(greater_labels) + self.log_loss(-less_labels))
 
-            # if self.loss_weight['l1'] != 0:
+            if self.loss_weights['l1'] != 0:
+                loss_values['l1'] = self.loss_weights['l1'] * F.l1_loss(generated['prediction'], x['driving'])
 
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3
@@ -1401,7 +1418,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 
                 loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
                                                 + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
-                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
+                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
             if np.array(self.loss_weights['localized']).sum() != 0:
                 localized_loss = 0
@@ -1504,16 +1521,16 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             if self.loss_weights['keypoint'] != 0:
                 # print(kp_driving['value'].shape)     # (bs, k, 3)
                 value_total = 0
-                for i in range(kp_driving['value'].shape[1]):
-                    for j in range(kp_driving['value'].shape[1]):
+                for i in range(kp_canonical['value'].shape[1]):
+                    for j in range(kp_canonical['value'].shape[1]):
                         dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
-                        dist = 0.1 - dist      # set Dt = 0.1
+                        dist = 0.2 - dist      # set Dt = 0.1
                         dd = torch.gt(dist, 0) 
                         value = (dist * dd).mean()
                         value_total += value
 
-                kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
-                value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
+                kp_mean_depth = kp_canonical['value'][:, :, -1].mean(-1)
+                value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
 
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
@@ -1743,7 +1760,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                         value_total += value
 
                 kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
-                value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
+                value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
 
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total

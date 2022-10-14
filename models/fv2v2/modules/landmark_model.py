@@ -263,7 +263,7 @@ class LandmarkModel():
         frame_landmarks = np.stack([frame_landmarks[:, 0].clip(0, H - 1), frame_landmarks[:, 1].clip(0, W - 1)], axis=1)
         return (bb, frame_landmarks)
 
-    def normalize_mesh(self, landmarks, image_height, image_width):
+    def normalize_mesh(self, landmarks, image_height, image_width, z_mean=None):
         eos_landmarks = []
         # print(f'landmarks: {landmarks}')
         # print(f'image size: {image_height}, {image_width}')
@@ -284,14 +284,22 @@ class LandmarkModel():
         view = pose.get_modelview()
         proj[3, 3] = 1
         a = multiplyABC(viewport, proj, view)
-
-        # print(f'a shape: {a}')
-        # print(f'proj: {pose.get_projection()}')
-        # print(f'view: {pose.get_modelview()}')
-
+        
         a = a.transpose()
         mesh_3d_points = np.dot(vertices, a)
-
+        
+        if z_mean is not None:
+            z_bias = mesh_3d_points[:, 2].mean()
+            viewport = np.array([[w2, 0, 0, w2],
+                                [0, -h2, 0, h2],
+                                [0, 0, 1, -75 - z_bias],
+                                [0, 0, 0, 1]])
+            a = multiplyABC(viewport, proj, view)
+            
+            a = a.transpose()
+            mesh_3d_points = np.dot(vertices, a)
+            # print(f'z_mean adjusted: {z_bias}')
+        
         # print(f'vertices: {vertices}')
         # print()
         # landmark index in mesh
@@ -332,5 +340,11 @@ class LandmarkModel():
         # print(f'normed mesh: {mesh_3d_points}')
         normalized_landmarks_3d = normalized_landmarks_3d[:, :3]
         # landmarks_3d = vertices[Ind, :3]
-        return normalized_landmarks_3d, {'U': a, 'viewport': viewport, 'proj': proj, 'view': view, 'normalizer': normalizer}, Ind
+        # print(f'a shape: {a}')
+        # print(f'value: {vertices}')
+        # print(f'proj: {pose.get_projection()}')
+        # print(f'view: {pose.get_modelview()}')
+        # while True:
+        #     continue
+        return normalized_landmarks_3d, {'U': a, 'viewport': viewport, 'proj': proj, 'view': view, 'normalizer': normalizer, 'landmarks_3d': landmarks_3d}, Ind
         

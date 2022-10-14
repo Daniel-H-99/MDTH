@@ -166,6 +166,11 @@ class Visualizer:
         source = np.transpose(source, [0, 2, 3, 1])
         images.append((source, kp_source))
 
+        if 'source_kp_canonical' in out:
+            # Source image with keypoints
+            kp_source_canonical = out['source_kp_canonical']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
+            images.append((source, kp_source_canonical))
+        
         # Equivariance visualization
         if 'transformed_frame' in out:
             transformed = out['transformed_frame'].data.cpu().numpy()
@@ -179,14 +184,22 @@ class Visualizer:
         driving = np.transpose(driving, [0, 2, 3, 1])
         images.append((driving, kp_driving))
 
+        if 'driving_kp_canonical' in out:
+            # Source image with keypoints
+            kp_driving_canonical = out['driving_kp_canonical']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
+            images.append((driving, kp_driving_canonical))
+            
         # Result
         prediction = out['prediction'].data.cpu().numpy()
         prediction = np.transpose(prediction, [0, 2, 3, 1])
-        images.append(prediction)
+        if 'kp_canonical' in out:
+            kp_canonical = out['kp_canonical']['value'][:, :, :2].data.cpu().numpy()
+            images.append((prediction, kp_canonical))
+        else:
+            images.append(prediction)
 
         # random source image (must be same be normal one)
         if 'kp_source_random' in out:
-            source = source.data.cpu()
             kp_source = out['kp_source_random']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
             images.append((source, kp_source))
             
@@ -207,8 +220,10 @@ class Visualizer:
             prediction = out['prediction_cycled'].data.cpu().numpy()
             prediction = np.transpose(prediction, [0, 2, 3, 1])
             images.append((prediction, kp_driving))
-
-
+        if 'source_mesh_image' in out:
+            
+            images.append(np.transpose(out['source_mesh_image'].repeat(1, 3, 1, 1).data.cpu().numpy(), [0,2,3,1]))
+            images.append(np.transpose(out['driving_mesh_image'].repeat(1,3,1,1).data.cpu().numpy(), [0, 2, 3,1]))
         ## Occlusion map
         if 'occlusion_map' in out:
             occlusion_map = out['occlusion_map'].data.cpu().repeat(1, 3, 1, 1)

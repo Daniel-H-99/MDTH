@@ -96,10 +96,10 @@ train_params:
     motion_match: 0
     log: 0
     teacher: 0
-    expression: 5
+    expression: 0
     localized: [0, 0, 0, 0, 0, 0, 0, 0, 0]
     id_cls: 10
-    l1: 10
+    l1: 0
 
 visualizer_params:
   kp_size: 5

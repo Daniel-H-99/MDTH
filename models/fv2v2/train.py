@@ -25,7 +25,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     # optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
 
     if checkpoint_ref is not None:
-        Logger.load_cpk(checkpoint_ref, he_estimator=he_estimator)
+        Logger.load_cpk(checkpoint_ref, generator=generator, he_estimator=he_estimator)
 
     if checkpoint is not None:
         start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator, optimizer_exp_transformer=optimizer, optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator)

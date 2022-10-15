@@ -170,7 +170,6 @@ def keypoint_transformation(kp_canonical, mesh):
     device = kp_canonical['value'].device
     
     kp_normed = kp_canonical['value'] + mesh['exp']
-
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
@@ -216,15 +215,15 @@ def get_rotation_matrix(yaw, pitch, roll):
     return rot_mat
 
 
-# def keypoint_transformation(kp_canonical, he, estimate_jacobian=True):
+# def keypoint_transformation(kp_canonical, he, estimate_jacobian=False):
 #     kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
 #     yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
 #     t, exp = he['t'], he['tf_exp']
     
-#     exp = exp.view(exp.shape[0], -1, 3)
+#     # exp = exp.view(exp.shape[0], -1, 3)
 
 #     kp = kp + exp
-        
+#     kp[:, :, 2] = 0.8
 #     yaw = headpose_pred_to_degree(yaw)
 #     pitch = headpose_pred_to_degree(pitch)
 #     roll = headpose_pred_to_degree(roll)
@@ -240,13 +239,13 @@ def get_rotation_matrix(yaw, pitch, roll):
 
 #     kp_transformed = kp_t
 
-#     if estimate_jacobian:
-#         jacobian = kp_canonical['jacobian']   # (bs, k ,3, 3)
-#         jacobian_transformed = torch.einsum('bmp,bkps->bkms', rot_mat, jacobian)
-#     else:
-#         jacobian_transformed = None
+#     # if estimate_jacobian:
+#     #     jacobian = kp_canonical['jacobian']   # (bs, k ,3, 3)
+#     #     jacobian_transformed = torch.einsum('bmp,bkps->bkms', rot_mat, jacobian)
+#     # else:
+#     #     jacobian_transformed = None
 
-#     return {'value': kp_transformed, 'jacobian': jacobian_transformed}
+#     return {'value': kp_transformed}
 
 class GeneratorFullModelWithRefHe(torch.nn.Module):
     """
@@ -1304,13 +1303,15 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh['exp'] = src_exp
             driving_mesh['exp'] = drv_exp
 
+
+            # he_source['tf_exp'] = src_exp
+            # he_driving['tf_exp'] = drv_exp
+            
             kp_canonical = {'value': tf_output['kp_src']}
             kp_canonical_driving = {'value': tf_output['kp_drv']}
-            # {'value': value, 'jacobian': jacobian}
-
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
             kp_driving = keypoint_transformation(kp_canonical_driving, driving_mesh)
-
+            
             kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
             kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
             kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
@@ -1538,7 +1539,11 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
-
+                print(f'mesh depth: {source_mesh["value"][:, :, -1]}')
+                print(f'mesh raw depth: {source_mesh["raw_value"][:, :, -1]}')
+                print(f'kp_mean_depth: {kp_driving["value"][:, :, -1].mean(-1)}')
+                print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
+                
             if self.loss_weights['headpose'] != 0:
                 transform_hopenet =  transforms.Compose([
                                                         transforms.Resize(size=(224, 224)),
@@ -1603,6 +1608,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             for k, v in list(generated_random.items()):
                 generated[f'{k}_random'] = v
             
+
 
             if cycled_drive:
                 ## cycled expression drive

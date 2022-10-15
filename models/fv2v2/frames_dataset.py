@@ -147,7 +147,8 @@ class FramesDataset3(Dataset):
         H, W = image.shape[:2]
         bb, lm = self.landmark_model.get_landmarks_fa(image)
         # lm[:, 1] = H - lm[:, 1]
-        lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W, z_mean=0)
+        lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W)
+        
         # U = torch.from_numpy(U['U'])
         normalizer = U['normalizer']
         U = U['U']
@@ -297,7 +298,8 @@ class FramesDataset3(Dataset):
                     # print(f"raw_value: {mesh['raw_value'][48:] * 2 / L + A}")
                     # print(f"value: {mesh['value'][48:]}")
 
-                    mesh['raw_value'] = np.array(mesh_mp['raw_value'], dtype='float32') * 2 / L + A
+                    # mesh['raw_value'] = np.array(mesh_mp['raw_value'], dtype='float32') * 2 / L + A
+                    mesh['raw_value'] = mesh['raw_value'] * 2 / L + A
 
                     # print('checkpoint 2')
                     # print(f'data type: {mesh["value"].dtype}')

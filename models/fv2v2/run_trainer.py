@@ -85,11 +85,11 @@ if __name__ == "__main__":
     # if opt.verbose:
     #     print(kp_detector)
 
-    # he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
-    #                            **config['model_params']['common_params'])
+    he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
+                               **config['model_params']['common_params'])
 
-    # if torch.cuda.is_available():
-    #     he_estimator.to(opt.device_ids[0])
+    if torch.cuda.is_available():
+        he_estimator.to(opt.device_ids[0])
 
 
     exp_transformer = ExpTransformer(**config['model_params']['exp_transformer_params'],
@@ -107,4 +107,4 @@ if __name__ == "__main__":
 
     if opt.mode == 'train':
         print(f"Training with stage {opt.stage}...")
-        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, None, None, opt.checkpoint, opt.checkpoint_ref, log_dir, dataset, opt.device_ids)
+        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, None, he_estimator, opt.checkpoint, opt.checkpoint_ref, log_dir, dataset, opt.device_ids)

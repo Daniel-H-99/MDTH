@@ -1534,7 +1534,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
                 kp_mean_depth = kp_canonical['value'][:, :, -1].mean(-1)
                 value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
-
+                print(f'kp_mean_depth: {kp_driving["value"][:, :, -1].mean(-1)}')
+                print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
 

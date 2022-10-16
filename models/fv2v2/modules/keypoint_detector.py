@@ -314,9 +314,9 @@ class ExpTransformer(nn.Module):
         drv_embedding = self.encode(drv)
 
         src_output = self.decode(src_embedding)
-        drv_output = self.decode({'style': src_embedding['style'], 'exp': drv_embedding['exp']})
+        drv_output = self.decode(drv_embedding)
 
-        return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding, 'kp': src_output['kp']}
+        return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding, 'src_kp': src_output['kp'], 'drv_kp': drv_output['kp']}
 
 class HEEstimator(nn.Module):
     """

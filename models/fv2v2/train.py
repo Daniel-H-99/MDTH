@@ -33,7 +33,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     else:
         start_epoch = 0
         
-    # start_epoch = 0
+    start_epoch = 0
     # print(f'start epoch: {start_epoch}')
     scheduler = MultiStepLR(optimizer, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)

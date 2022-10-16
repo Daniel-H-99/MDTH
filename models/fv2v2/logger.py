@@ -52,7 +52,13 @@ class Logger:
                  optimizer_generator=None, optimizer_discriminator=None, optimizer_kp_detector=None, optimizer_he_estimator=None, optimizer_hie_estimator=None, optimizer_exp_transformer=None):
         checkpoint = torch.load(checkpoint_path)
         if generator is not None:
-            generator.load_state_dict(checkpoint['generator'])
+            # _state = generator.state_dict()
+            # for k, v in checkpoint['generator'].items():
+            #     if 'dense_motion_network' in k:
+            #         continue
+            #     _state[k] = v
+            _state = checkpoint['generator']
+            generator.load_state_dict(_state)
         if kp_detector is not None:
             kp_detector.load_state_dict(checkpoint['kp_detector'])
         if he_estimator is not None:

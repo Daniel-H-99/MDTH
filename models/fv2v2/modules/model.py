@@ -1305,11 +1305,12 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh['exp'] = src_exp
             driving_mesh['exp'] = drv_exp
 
-            kp_canonical = {'value': tf_output['kp']}
+            kp_canonical = {'value': tf_output['src_kp']}
+            kp_canonical_drv = {'value': tf_output['drv_kp']}
 
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
+            kp_driving = keypoint_transformation(kp_canonical_drv, driving_mesh)
 
             kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
             kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']

@@ -126,6 +126,8 @@ RIGHT_EYEBROW_IDX = [70, 46, 53, 52, 65, 55, 107, 66, 105, 63]
 LEFT_IRIS_IDX = [474, 475, 476, 477]
 RIGHT_IRIS_IDX = [469, 470, 471, 472]
 CHIN_IDX = [365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136]
+OPENFACE_EYE_IDX = list(range(17, 27)) + list(range(36, 48))
+OPENFACE_LIP_IDX = list(range(48, 68))
 
 def create_dir(dir_name):
     if not os.path.exists(dir_name):

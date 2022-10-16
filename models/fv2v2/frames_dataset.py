@@ -19,7 +19,7 @@ from sklearn.model_selection import train_test_split
 from imageio import mimread
 import imageio
 import time 
-from utils.util import extract_mesh, get_mesh_image, draw_section, draw_mouth_mask, LEFT_EYE_IDX, LEFT_EYEBROW_IDX,LEFT_IRIS_IDX, RIGHT_EYE_IDX, RIGHT_EYEBROW_IDX, RIGHT_IRIS_IDX, IN_LIP_IDX, OUT_LIP_IDX
+from utils.util import extract_mesh, get_mesh_image, draw_section, draw_mouth_mask, OPENFACE_EYE_IDX, OPENFACE_LIP_IDX, LEFT_EYE_IDX, LEFT_EYEBROW_IDX,LEFT_IRIS_IDX, RIGHT_EYE_IDX, RIGHT_EYEBROW_IDX, RIGHT_IRIS_IDX, IN_LIP_IDX, OUT_LIP_IDX
 import torch
 from modules.landmark_model import LandmarkModel
 
@@ -297,8 +297,13 @@ class FramesDataset3(Dataset):
                     # print(f"raw_value: {mesh['raw_value'][48:] * 2 / L + A}")
                     # print(f"value: {mesh['value'][48:]}")
 
-                    mesh['raw_value'] = np.array(mesh_mp['raw_value'], dtype='float32') * 2 / L + A
-
+                    # mesh['raw_value'] = np.array(mesh_mp['raw_value'], dtype='float32') * 2 / L + A
+                    
+                    ### use openface raw value
+                    mesh['raw_value'] = np.array(mesh['raw_value'], dtype='float32') * 2 / L + A
+                    mesh['OPENFACE_EYE_IDX'] = OPENFACE_EYE_IDX
+                    mesh['OPENFACE_LIP_IDX'] = OPENFACE_LIP_IDX
+                    
                     # print('checkpoint 2')
                     # print(f'data type: {mesh["value"].dtype}')
                     meshes.append(mesh)

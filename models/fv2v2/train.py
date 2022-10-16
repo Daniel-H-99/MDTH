@@ -25,14 +25,15 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     # optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
 
     if checkpoint_ref is not None:
-        Logger.load_cpk(checkpoint_ref, generator=generator, he_estimator=he_estimator)
+        Logger.load_cpk(checkpoint_ref, generator=generator)
 
     if checkpoint is not None:
+        # start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, discriminator=discriminator)
         start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator, optimizer_exp_transformer=optimizer, optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator)
     else:
         start_epoch = 0
-
-    start_epoch = 0
+        
+    # start_epoch = 0
     # print(f'start epoch: {start_epoch}')
     scheduler = MultiStepLR(optimizer, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)

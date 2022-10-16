@@ -174,18 +174,18 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    
+    # tmp[:, :, 2] = -tmp[:, :, 2]
     kp_transformed = tmp # B x N x 3
     
     
-    kp_canonical = kp_canonical['value']
+    tmp = kp_canonical['value']
 
-    tmp = torch.cat([kp_canonical, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
+    tmp = torch.cat([tmp, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    kp_canonical = tmp # B x N x 3
+    kp_canonical_transformed = tmp # B x N x 3
 
-    return {'value': kp_transformed, 'normed': kp_normed, 'canonical': kp_canonical}         
+    return {'value': kp_transformed, 'normed': kp_normed, 'canonical': kp_canonical_transformed}         
     
         
 def get_rotation_matrix(yaw, pitch, roll):
@@ -1535,8 +1535,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
                 kp_mean_depth = kp_canonical['value'][:, :, -1].mean(-1)
                 value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
-                print(f'kp_mean_depth: {kp_driving["value"][:, :, -1].mean(-1)}')
-                print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
+                # print(f'kp_mean_depth: {kp_driving["value"][:, :, -1].mean(-1)}')
+                # print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
 

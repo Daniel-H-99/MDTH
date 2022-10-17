@@ -509,11 +509,11 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             driving_codes.append(tf_output['drv_embedding']['exp_code'].detach().cpu().numpy())
 
             kp_canonical = {'value': tf_output['src_kp']}
-            kp_canonical_drv = {'value': tf_output['drv_kp']}
+            # kp_canonical_drv = {'value': tf_output['drv_kp']}
             
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, _source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical_drv, _driving_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
             
             kp_norm = kp_driving
 

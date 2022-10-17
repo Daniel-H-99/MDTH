@@ -41,7 +41,7 @@ def read_config(config_path):
 
 	return config
 
-def setup_exp(config):
+def setup_exp(args, config):
 	materials = {}
 	pipeline = THPipeline(config, config.dynamic.gpus)
 	materials['label'] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -49,6 +49,7 @@ def setup_exp(config):
 		materials['label'] = '_'.join([config.dynamic.label, materials['label']])
 	cwd = os.path.join(config.env.res_path, materials['label'])
 	os.makedirs(cwd)
+	shutil.copy(args.config, os.path.join(cwd, 'config.yaml'))
 	os.makedirs(os.path.join(cwd, 'inputs'))
 	test_samples = construct_test_samples(config, cwd=cwd)
 	materials['config'] = config
@@ -110,6 +111,6 @@ if __name__ == '__main__':
 	config = read_config(config_path)
 	print(f'running with config: {config}')
  
-	materials = setup_exp(config)
+	materials = setup_exp(args, config)
  
 	run_exp(materials)

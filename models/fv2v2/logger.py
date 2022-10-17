@@ -69,9 +69,14 @@ class Logger:
             except:
                print ('No discriminator in the state-dict. Dicriminator will be randomly initialized')
         
+        
         if exp_transformer is not None:
-            exp_transformer.load_state_dict(checkpoint['exp_transformer'])
-            print(f'exp transforer loaded')
+            _state = exp_transformer.state_dict()
+            for k, v in checkpoint['exp_transformer'].items():
+                if 'exp_encoder' in k or 'id_encoder' in k or 'kp_decoder' in k:
+                    _state[k] = v
+            # _state = checkpoint['exp_transformer']
+            exp_transformer.load_state_dict(_state)
         if hie_estimator is not None:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])
 

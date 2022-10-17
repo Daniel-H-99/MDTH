@@ -18,13 +18,13 @@ config:
                 model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000079-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/img_mesh_logloss.yaml'   
             generator:
-                model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000079-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/img_mesh_logloss.yaml'          
+                model: '@checkpoint_path/MDTH/mesh_img_self_c128_motion 16_10_22_18.33.54/00000279-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_self_c128_motion 16_10_22_18.33.54/mesh_img_self_c128_motion.yaml'          
             exp_transformer:
-                model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000084-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/img_mesh_logloss.yaml'            
+                model: '@checkpoint_path/MDTH/mesh_img_self_c128_motion 16_10_22_18.33.54/00000279-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_self_c128_motion 16_10_22_18.33.54/mesh_img_self_c128_motion.yaml'              
         attr:
-            fps: 30
+            fps: 25
     preprocess:
         input:
             dir: '@raw_path' 
@@ -51,12 +51,13 @@ config:
         output:
             dir: '@res_path'
 dynamic:
-    gpus: [0]
-    mode: 'pair'
+    gpus: [1]
+    mode: 'combination'
     input_as_file: True
     inputs:
-        pair: 'inputs/pair_hetero.txt'
-    label: 'img_mesh_logloss_084_heter_driving_code'
+        source: 'inputs/source.txt'
+        driving: 'inputs/driving.txt'
+    label: 'mesh_img_self_c128_motion_279_combi_driving_code'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

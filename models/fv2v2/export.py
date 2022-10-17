@@ -407,7 +407,8 @@ def preprocess_dict(d_list, device='cuda:0'):
         elif type(v) == dict:
             res[k] = preprocess_dict([d[k] for d in d_list])
         else:
-            res[k] = torch.cat([torch.Tensor([d[k]]) for d in d_list], dim=0).to(device)
+            print(f'key: {k}')
+            res[k] = torch.cat([torch.Tensor([d[k]]).to(device) for d in d_list], dim=0)
         
     return res
 
@@ -496,13 +497,8 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
-                kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
-                # he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
-
-            # he_driving = he_estimator(driving_frame)      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            
-            tf_output = exp_transformer(_source_mesh['value'], _driving_mesh['value'])
+            tf_output = exp_transformer({'img': source, 'mesh': _source_mesh['value']}, {'img': driving_frame, 'mesh': _driving_mesh['value']})
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
@@ -512,9 +508,12 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             
             driving_codes.append(tf_output['drv_embedding']['exp_code'].detach().cpu().numpy())
 
+            kp_canonical = {'value': tf_output['src_kp']}
+            kp_canonical_drv = {'value': tf_output['drv_kp']}
+            
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, _source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
+            kp_driving = keypoint_transformation(kp_canonical_drv, _driving_mesh)
             
             kp_norm = kp_driving
 
@@ -599,8 +598,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     source_mesh['value'] = source_landmarks['3d_landmarks'].float() / SCALE
     right_iris = source_landmarks['normed_right_iris'].float() / SCALE
     left_iris = source_landmarks['normed_left_iris'].float() / SCALE
-    source_mesh['value'][3] = right_iris
-    source_mesh['value'][4] = left_iris
+    # source_mesh['value'][3] = right_iris
+    # source_mesh['value'][4] = left_iris
     source_mesh['raw_value'] = source_landmarks['3d_landmarks_pose']
     pose_p = source_landmarks['p']
     source_mesh['proj'] = pose_p['proj'].copy()
@@ -734,8 +733,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
 
     ## iris_movement adaption
-    eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 2] =  eyes_drvn[0, LEFT_IRIS_LANDMARK_IDX, 2].squeeze()
-    eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 2] = eyes_drvn[0, RIGHT_IRIS_LANDMARK_IDX, 2].squeeze()
+    # eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 2] =  eyes_drvn[0, LEFT_IRIS_LANDMARK_IDX, 2].squeeze()
+    # eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 2] = eyes_drvn[0, RIGHT_IRIS_LANDMARK_IDX, 2].squeeze()
 
     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
@@ -747,9 +746,11 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         target_landmarks = torch.tensor(source_landmarks['3d_landmarks']).float()
         target_landmarks[ROI_IDX] = driving_landmark[ROI_IDX_FLAME]
 
+        print(f'roi eye idx length: {len(ROI_EYE_IDX)}')
+        print(f'eyes_drvn length: {len(eyes_drvn[0])}')
         ### apply eye movement ###
-        # target_landmarks[[3, 4] + ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
-        target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
+        # target_landmarks[ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
+        # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
 
 
         # mesh['value'] = source_mesh['value']

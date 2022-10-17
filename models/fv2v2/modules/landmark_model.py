@@ -264,7 +264,7 @@ class LandmarkModel():
         frame_landmarks = np.stack([frame_landmarks[:, 0].clip(0, H - 1), frame_landmarks[:, 1].clip(0, W - 1)], axis=1)
         return (bb, frame_landmarks)
 
-    def normalize_mesh(self, landmarks, image_height, image_width, z_mean=None, R_noise=None, t_noise=None):
+    def normalize_mesh(self, landmarks, image_height, image_width, z_mean=0, R_noise=None, t_noise=None):
         eos_landmarks = []
         # print(f'landmarks: {landmarks}')
         # print(f'image size: {image_height}, {image_width}')

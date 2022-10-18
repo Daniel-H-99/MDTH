@@ -259,7 +259,7 @@ class ExpTransformer(nn.Module):
         init.constant_(self.codebook_pre_scale, 1)
         init.constant_(self.codebook_post_scale, 1)
         # latent_dim = 2048
-
+        
     # def split_embedding(self, img_embedding):
     #     style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
     #     exp_code = F.tanh(torch.einsum('bk,kp->bkp', self.vq_exp(exp_embedding), self.codebook_pre_scale).squeeze(2))  # B x num_heads
@@ -314,7 +314,8 @@ class ExpTransformer(nn.Module):
         drv_embedding = self.encode(drv)
 
         src_output = self.decode(src_embedding)
-        drv_output = self.decode({'kp': src_embedding['kp'], 'style': src_embedding['style'], 'exp': drv_embedding['exp']})
+        drv_output = self.decode(drv_embedding)
+        # drv_output = self.decode({'kp': src_embedding['kp'], 'style': src_embedding['style'], 'exp': drv_embedding['exp']})
 
         return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding, 'src_kp': src_output['kp'], 'drv_kp': drv_output['kp']}
 

@@ -503,17 +503,20 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
+            src_exp = 0
+            drv_exp = 0
+            
             _source_mesh['exp'] = src_exp
             _driving_mesh['exp'] = drv_exp
             
             driving_codes.append(tf_output['drv_embedding']['exp_code'].detach().cpu().numpy())
 
             kp_canonical = {'value': tf_output['src_kp']}
-            # kp_canonical_drv = {'value': tf_output['drv_kp']}
+            kp_canonical_drv = {'value': tf_output['drv_kp']}
             
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, _source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
+            kp_driving = keypoint_transformation(kp_canonical_drv, _driving_mesh)
             
             kp_norm = kp_driving
 
@@ -752,6 +755,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         # target_landmarks[ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
         # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
 
+        target_landmarks = driving_landmark
 
         # mesh['value'] = source_mesh['value']
         mesh['value'] = target_landmarks.float() / SCALE

@@ -256,21 +256,21 @@ class ExpTransformer(nn.Module):
         )
 
 
-        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=0)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=0)
-        self.delta_style_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
-        self.delta_exp_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        # self.delta_style_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
+        # self.delta_exp_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
         
-        self.delta_fuser_style = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
-        self.delta_fuser_exp = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
+        # self.delta_fuser_style = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
+        # self.delta_fuser_exp = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
         
-        self.delta_exp_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
-        self.delta_style_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
+        # self.delta_exp_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
+        # self.delta_style_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(2 * self.num_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=2 * self.num_heads, latent_dim=self.latent_dim // 2, output_dim=self.num_kp * 3, depth=3)
+        self.delta_decoder = LinearEncoder(input_dim=2 * self.num_heads, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=3)
         
         init.kaiming_uniform_(self.codebook)
         init.constant_(self.codebook_pre_scale, 1)
@@ -308,16 +308,17 @@ class ExpTransformer(nn.Module):
         kp = id_embedding
         style = F.normalize(self.style_decoder(id_embedding), dim=-1)
 
-        style_from_img = self.delta_style_extractor_from_img(exp_latent)
-        style_from_mesh = self.delta_style_extractor_from_mesh(id_latent)
-        exp_from_img = self.delta_exp_extractor_from_img(exp_latent)
-        exp_from_mesh = self.delta_exp_extractor_from_mesh(id_latent)
+        mesh_flattened = x['mesh'].flatten(1)
+        # style_from_img = self.delta_style_extractor_from_img(exp_latent)
+        style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
+        # exp_from_img = self.delta_exp_extractor_from_img(exp_latent)
+        exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened)
         
-        fused_style =  self.delta_fuser_style(torch.cat([style_from_img, style_from_mesh], dim=1))
-        fused_exp = self.delta_fuser_exp(torch.cat([exp_from_img, exp_from_mesh], dim=1))
+        # fused_style =  self.delta_fuser_style(torch.cat([style_from_img, style_from_mesh], dim=1))
+        # fused_exp = self.delta_fuser_exp(torch.cat([exp_from_img, exp_from_mesh], dim=1))
         
-        delta_style_code = F.tanh(self.delta_style_heads(fused_style))
-        delta_exp_code = F.tanh(self.delta_exp_heads(fused_exp) * self.delta_heads_pre_scale.unsqueeze(0).squeeze(2))
+        delta_style_code = F.tanh(style_from_mesh)
+        delta_exp_code = F.tanh(exp_from_mesh * self.delta_heads_pre_scale.unsqueeze(0).squeeze(2))
         
         return {'kp': kp, 'style': style, 'exp': exp_embedding, 'exp_code': exp_code, 'delta_style_code': delta_style_code , 'delta_exp_code': delta_exp_code}
 

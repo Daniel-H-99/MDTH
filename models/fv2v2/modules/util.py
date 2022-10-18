@@ -1,3 +1,4 @@
+from turtle import forward
 from torch import nn
 
 import torch.nn.functional as F
@@ -168,6 +169,26 @@ class LinearEncoder(nn.Module):
         return x
     
 
+class AdaIn(nn.Module):
+    def __init__(self, condition_dim, num_output, hidden_dim=128, depth=2):
+        super(AdaIn, self).__init__()
+        self.condition_dim = condition_dim
+        self.depth = depth
+        self.num_output = num_output
+        self.condition_encoder = LinearEncoder(input_dim=self.condition_dim, hidden_dim=self.hidden_dim, output_dim=self.num_output, depth=self.depth)
+    
+    def forward(self, x):
+        # x: B x condition_dim
+        return self.condition_encoder(x) # B x num_output
+    
+    def normalize(self, x, mean, std):
+        # x: B x D
+        # x, std: B
+        mean_x = x.mean(dim=-1, keepdim=True)
+        std_x = x.std(dim=-1, keepdim=True)
+        normed_x = (x - mean_x) / std_x.clamp(min=1e-6)
+        return mean.unsqueeze(1) + normed_x * std.unsqueeze(1)
+    
 def calc_mean_std(feat, eps=1e-5):
     # eps is a small value added to the variance to avoid divide-by-zero.
     size = feat.size()

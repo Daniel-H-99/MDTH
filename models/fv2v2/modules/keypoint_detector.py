@@ -255,9 +255,28 @@ class ExpTransformer(nn.Module):
             nn.Linear(self.latent_dim, 3*num_kp),
         )
 
+
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=0)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=0)
+        self.delta_style_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
+        self.delta_exp_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
+        
+        self.delta_fuser_style = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
+        self.delta_fuser_exp = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
+        
+        self.delta_exp_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
+        self.delta_style_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
+        
+        self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
+        self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
+        
+        self.delta_decoder = LinearEncoder(input_dim=self.num_heads, latent_dim=self.latent_dim // 2, output_dim=self.num_kp * 3, depth=3)
+        
         init.kaiming_uniform_(self.codebook)
         init.constant_(self.codebook_pre_scale, 1)
         init.constant_(self.codebook_post_scale, 1)
+        init.constant_(self.delta_heads_pre_scale, 1)
+        init.constant_(self.delta_heads_post_scale, 1)
         # latent_dim = 2048
         
     # def split_embedding(self, img_embedding):
@@ -279,16 +298,28 @@ class ExpTransformer(nn.Module):
         return output
 
     def encode(self, x):
-        exp_embedding = self.exp_encoder(x['img'])
+        exp_latent = self.exp_encoder[0](x['img'])
+        exp_embedding = self.exp_encoder[1:](exp_latent)
         id_embedding = self.id_encoder(x['mesh'])
-        
+        id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
         exp_code = F.tanh(torch.einsum('bk,kp->bkp', self.vq_exp(exp_embedding), self.codebook_pre_scale).squeeze(2))  # B x num_heads
         exp_embedding = self.decode_exp_code(exp_code)
 
         kp = id_embedding
         style = F.normalize(self.style_decoder(id_embedding), dim=-1)
 
-        return {'kp': kp, 'style': style, 'exp': exp_embedding, 'exp_code': exp_code}
+        style_from_img = self.delta_style_extractor_from_img(exp_latent)
+        style_from_mesh = self.delta_style_extractor_from_mesh(id_latent)
+        exp_from_img = self.delta_exp_extractor_from_img(exp_latent)
+        exp_from_mesh = self.delta_exp_extractor_from_mesh(id_latent)
+        
+        fused_style =  self.delta_fuser_style(torch.cat([style_from_img, style_from_mesh], dim=1))
+        fused_exp = self.delta_fuser_exp(torch.cat([exp_from_img, exp_from_mesh], dim=1))
+        
+        delta_style_code = F.tanh(self.delta_style_heads(fused_style))
+        delta_exp_code = F.tanh(self.delta_exp_heads(fused_exp) * self.delta_heads_pre_scale.unsqueeze(0).squeeze(2))
+        
+        return {'kp': kp, 'style': style, 'exp': exp_embedding, 'exp_code': exp_code, 'delta_style_code': delta_style_code , 'delta_exp_code': delta_exp_code}
 
     # def kp_encode(self, x):
     #     embedding = F.leaky_relu(self.kp_encoder(x), 0.2)
@@ -307,6 +338,9 @@ class ExpTransformer(nn.Module):
             # random_flag = torch.rand(res['exp'].shape).to(res['exp'].device) >= 0.5
             # noise = 0.1 * torch.rand(res['exp'].shape).to(res['exp'].device) * random_flag
             # res['exp'] = res['exp'] + noise
+        if 'delta_style_code' in embedding and 'delta_exp_code' in embedding:
+            delta_latent = self.delta_heads_post_scale.unsqueeze(0).squeeze(2) * (embedding['delta_style_code'] * embedding['delta_exp_code']) # B x num_heads
+            res['delta'] = self.delta_decoder(delta_latent).view(-1, self.num_kp, 3)
         return res
 
     def forward(self, src, drv):

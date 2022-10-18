@@ -1274,10 +1274,21 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         # self.split_ids = [sec[1] for sec in self.sections]
 
         if self.stage == 2:
-            self.id_classifier_scale = train_params['id_classifier_scale']
-            self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
-            self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
-        
+            for name, p in self.exp_transformer.named_parameters():
+                if 'delta' not in name:
+                    p.requires_grad = False
+                else:
+                    p.requires_grad = True
+            self.exp_transformer.train()
+
+            generator.eval()
+            for p in generator.parameters():
+                p.requires_grad = False
+            
+        #     self.id_classifier_scale = train_params['id_classifier_scale']
+        #     self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
+        #     self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
+
         self.log_loss = lambda x: -torch.log((1 + x).clamp(min=1e-6)).mean()
 
     def forward(self, x, cycled_drive=False):
@@ -1384,8 +1395,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 
 
             if self.loss_weights['log'] != 0:
-                src_exp_code = tf_output['src_embedding']['exp_code']   # B x num_heads
-                drv_exp_code = tf_output['drv_embedding']['exp_code']   # B x num_heads
+                src_exp_code = tf_output['src_embedding']['delta_exp_code']   # B x num_heads
+                drv_exp_code = tf_output['drv_embedding']['delta_exp_code']   # B x num_heads
                 greater_mask = (src_exp_code >= drv_exp_code).detach() 
                 less_mask = ~greater_mask
                 greater_labels = torch.cat([src_exp_code[greater_mask], drv_exp_code[less_mask]], dim=0)
@@ -1571,70 +1582,134 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
         elif self.stage == 2:
-
-            bs = len(x['source_mesh']['value'])
             loss_values = {}
-
-            kp_source = x['source_mesh']
-            kp_driving = x['driving_mesh']
             
-            tf_output = self.exp_transformer(x['source_mesh']['value'], x['driving_mesh']['value'])
+            bs = len(x['source'])
+            
+            # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
+
+            # he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            
+            source_mesh = x['source_mesh']
+            driving_mesh = x['driving_mesh']
+            
+            # driving_mesh['scale'] = source_mesh['scale']
+            # driving_mesh['U'] = np.source_mesh['U']
+            
+            tf_output = self.exp_transformer({'img': x['source'], 'mesh': source_mesh['value']}, {'img': x['driving'], 'mesh': driving_mesh['value']})
+
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
-            kp_source['exp'] = src_exp
-            kp_driving['exp'] = drv_exp
+            source_mesh['exp'] = src_exp
+            driving_mesh['exp'] = drv_exp
+
+            kp_canonical = {'value': tf_output['src_kp']}
+            kp_canonical_drv = {'value': tf_output['drv_kp']}
+
+            delta_src_embedding = {'delta_style_code': tf_output['src_embedding']['delta_style_code'], 'delta_exp_code': tf_output['src_embedding']['delta_exp_code']}
+            delta_drv_embedding = {'delta_style_code': tf_output['src_embedding']['delta_style_code'], 'delta_exp_code': tf_output['drv_embedding']['delta_exp_code']}
+            # {'value': value, 'jacobian': jacobian}
+            
+            delta_src = self.exp_transformer.decode(delta_src_embedding)['delta']
+            delta_drv = self.exp_transformer.decode(delta_drv_embedding)['delta']
+            
+            driving_mesh['exp'] = source_mesh['exp'] - delta_src + delta_drv
+            
+            kp_source = keypoint_transformation(kp_canonical, source_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
+
+            kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
+            kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
+            kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
+            kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
+            # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
+            # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
+
+            
+            # driving_224 = x['hopenet_driving']
+            # yaw_gt, pitch_gt, roll_gt = self.hopenet(driving_224)
+
+            # reg = self.regularize(kp_canonical_source, kp_canonical_driving) # regularizor loss
+
+
+            
+            # x_reg = kp_canonical['value'].flatten(1)
+            # for x_i in x_reg:
+            #     self.pca_x.register(x_i.detach().cpu())
+            # if self.pca_x.steps > 2:
+            #     mu_x, u_x, s_x = self.pca_x.get_state(device='cuda')
+            #     loss_reg = ((x_reg - mu_x[None]).unsqueeze(1) @ ((u_x @ (s_x ** 2) @ u_x.t())[None] + self.sigma_err[None]).inverse() @ (x_reg - mu_x[None]).unsqueeze(2)).mean() # 1
+            #     loss['regularizor'] = self.loss_weights['regularizor'] * loss_reg
+            #     self.mu_x, self.u_x, self.s_x = self.pca_x.get_state()
+            # else:
+            #     loss['regularizor'] = self.loss_weights['regularizor'] * torch.zeros(1).cuda().mean()
+
+            # if self.pca_x.steps * self.pca_e.steps > 0:
+            #     kp_source, kp_driving = reg['kp_source'], reg['kp_driving']
+            #     loss = {k: self.loss_weights[k] * v for k, v in reg['loss'].items()}
+            # else:
+            #     kp_source, kp_driving = kp_canonical_source, kp_canonical_driving
+            #     loss = {k: self.loss_weights[k] * torch.zeros(1).cuda() for k, v in reg['loss'].items()}
+
+
+            # {'value': value, 'jacobian': jacobian}
+            # kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
+            # kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
+
+            
+            # print('entering generator')
+            # print(f'kp_source value: {kp_source["value"]}')
+            # print(f'kp_driving value: {kp_driving["value"]}')
             
             generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
-
+            generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
-
-            # ## random expression drive
-            # src_style = tf_output['src_embedding']['style']
-            # src_exp_code = tf_output['src_embedding']['exp']
-            # src_exp_code_random = 2 * torch.rand(bs, self.exp_transformer.num_heads).to(src_exp_code.device) - 1
-            # src_exp_code_random_decoded = self.exp_transformer.decode_exp_code(src_exp_code_random)
-            # random_embedding = {'style': src_style, 'exp': src_exp_code_random_decoded}
-            # src_exp_random = self.exp_transformer.decode(random_embedding)['exp']
-            # kp_source_random = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_random}
-            # generated_random = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_random)
-
-            generated_random = generated
-
-            for k, v in list(generated_random.items()):
-                generated[f'{k}_random'] = v
             
-
+            generated['source_kp_canonical'] = {'value': kp_source['canonical']}
+            generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
+            generated['source_mesh_image'] = kp_source['mesh_img_sec']
+            generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
+            
             if cycled_drive:
                 ## cycled expression drive
-                src_style = tf_output['src_embedding']['style']
-                src_exp_code_decoded = tf_output['drv_embedding']['exp']
-                src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
-                cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
-                src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
-                kp_source_cycled = {'U': kp_source['U'], 'scale': kp_source['scale'], 'exp': src_exp_cycled}
+                delta_style_code = tf_output['src_embedding']['delta_style_code']
+                delta_exp_code = tf_output['src_embedding']['delta_exp_code']
+                delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
+                delta_src_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
+                source_mesh_cycled = {'U': driving_mesh['U'], 'scale': driving_mesh['scale'], 'exp': source_mesh['exp'] - delta_src + delta_src_cycled}
+
+                kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 
                 generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):
                     generated[f'{k}_cycled'] = v
+                generated['kp_driving_cycled'] = kp_source_cycled
                 
-            if self.loss_weights['id_cls'] != 0:
-                scaled_source = self.id_classifier_scaler(x['source'])
-                scaled_driven = self.id_classifier_scaler(generated_random['prediction'])
-                id_src = self.id_classifier(scaled_source)
-                id_drvn = self.id_classifier(scaled_driven)
-                loss_values['id_cls'] = self.loss_weights['id_cls'] * torch.abs(id_drvn - id_src.detach()).mean()
+
+            if self.loss_weights['log'] != 0:
+                src_exp_code = tf_output['src_embedding']['delta_exp_code']   # B x num_heads
+                drv_exp_code = tf_output['drv_embedding']['delta_exp_code']   # B x num_heads
+                greater_mask = (src_exp_code >= drv_exp_code).detach() 
+                less_mask = ~greater_mask
+                greater_labels = torch.cat([src_exp_code[greater_mask], drv_exp_code[less_mask]], dim=0)
+                less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
+                loss_values['log'] = self.loss_weights['log'] * (self.log_loss(greater_labels) + self.log_loss(-less_labels))
+
+            if self.loss_weights['l1'] != 0:
+                loss_values['l1'] = self.loss_weights['l1'] * F.l1_loss(generated['prediction'], x['driving'])
 
             if self.loss_weights['motion_match'] != 0:
                 motion = generated['deformation'] # B x d x h x w x 3
                 motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w
-                it_section = kp_driving['raw_value'] # B x N x 3
-                motion_GT = kp_source['raw_value'] # B x N x 3
-                it_section_eye = it_section[:, kp_source['MP_EYE_SECTIONS'][0].long()]
-                motion_GT_eye = motion_GT[:, kp_source['MP_EYE_SECTIONS'][0].long()]
-                it_section_mouth = it_section[:, kp_source['MP_MOUTH_SECTIONS'][0].long()]
-                motion_GT_mouth = motion_GT[:, kp_source['MP_MOUTH_SECTIONS'][0].long()]
+                it_section = driving_mesh['raw_value'] # B x N x 3
+                motion_GT = source_mesh['raw_value'] # B x N x 3
+                it_section_eye = it_section[:, source_mesh['OPENFACE_EYE_IDX'][0].long()]
+                motion_GT_eye = motion_GT[:, source_mesh['OPENFACE_EYE_IDX'][0].long()]
+                it_section_mouth = it_section[:, source_mesh['OPENFACE_LIP_IDX'][0].long()]
+                motion_GT_mouth = motion_GT[:, source_mesh['OPENFACE_LIP_IDX'][0].long()]
                 # print(f'it section shape: {it_section.shape}')
                 # print(f'motion_GT section shape: {motion_GT.shape}')
                 # print(f'motion shape: {motion.shape}')
@@ -1653,10 +1728,10 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'motion_section_GT : {motion_GT}')
                 
                 loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
-                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
-                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
+                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
+                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
-            if self.loss_weights['localized'] != 0:
+            if np.array(self.loss_weights['localized']).sum() != 0:
                 localized_loss = 0
                 split = []
                 centre = []
@@ -1760,14 +1835,15 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 for i in range(kp_canonical['value'].shape[1]):
                     for j in range(kp_canonical['value'].shape[1]):
                         dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
-                        dist = 0.1 - dist      # set Dt = 0.1
+                        dist = 0.2 - dist      # set Dt = 0.1
                         dd = torch.gt(dist, 0) 
                         value = (dist * dd).mean()
                         value_total += value
 
-                kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
+                kp_mean_depth = kp_canonical['value'][:, :, -1].mean(-1)
                 value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
-
+                # print(f'kp_mean_depth: {kp_driving["value"][:, :, -1].mean(-1)}')
+                # print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
 
@@ -1797,7 +1873,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['headpose'] = self.loss_weights['headpose'] * value
 
             if self.loss_weights['expression'] != 0:
-                value = torch.norm(he_driving['exp'], p=1, dim=-1).mean()
+                value = torch.norm(driving_mesh['exp'], p=1, dim=-1).mean()
                 loss_values['expression'] = self.loss_weights['expression'] * value
+
 
         return loss_values, generated

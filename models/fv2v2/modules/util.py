@@ -123,7 +123,7 @@ class BiCategoricalEncodingLayer(nn.Module):
         return x
 
 class LinearEncoder(nn.Module):
-    def __init__(self, latent_dim: int = 128, input_dim: int = 128):
+    def __init__(self, input_dim: int, latent_dim: int = None, output_dim: int = None, depth=0):
         """
         :param latent_dim: size of the latent expression embedding before quantization through Gumbel softmax
         :param n_vertices: number of face mesh vertices
@@ -135,13 +135,24 @@ class LinearEncoder(nn.Module):
         
         self.input_dim = input_dim
         self.latent_dim = latent_dim
-
+        self.output_dim = output_dim
         
-        self.layers = torch.nn.ModuleList([
-            torch.nn.Linear(self.input_dim, self.latent_dim)
-        ])
-
-        self.code = torch.nn.Linear(self.latent_dim, self.latent_dim)
+        if self.latent_dim is None:
+            self.latent_dim = self.input_dim
+        if self.output_dim is None:
+            self.output_dim = self.latent_dim
+            
+            
+        self.depth = depth
+        
+        self.layers = torch.nn.ModuleList()
+        if self.depth == 0:
+            self.layers.append(nn.Linear(self.input_dim, self.output_dim))
+        else:
+            self.layers.append(nn.Linear(self.input_dim, self.latent_dim))
+        for _ in range(self.depth - 1):
+            self.layers.append(nn.Linear(self.latent_dim, self.latent_dim))
+        self.layers.append(nn.Linear(self.latent_dim, self.output_dim))
 
     def forward(self, x):
         """
@@ -149,10 +160,10 @@ class LinearEncoder(nn.Module):
         :return: code: B x latent_dim Tensor containing a latent expression code/embedding
         """
         
-        for layer in self.layers:
+        for layer in self.layers[:-1]:
             x = F.leaky_relu(layer(x), 0.2)
 
-        x = self.code(x)
+        x = self.layers[-1](x)
 
         return x
     
@@ -215,9 +226,9 @@ class MeshEncoder(nn.Module):
         for layer in self.layers:
             x = F.leaky_relu(layer(x), 0.2)
 
-        x = self.code(x)
+        output = self.code(x)
 
-        return x
+        return {'latent': x, 'output': output}
     
 class ResnetEncoder(nn.Module):
     def __init__(self):

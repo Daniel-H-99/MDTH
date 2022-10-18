@@ -268,9 +268,9 @@ class ExpTransformer(nn.Module):
         self.delta_style_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
-        self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
+        self.delta_heads_post_scale = nn.Parameter(torch.zeros(2 * self.num_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=self.num_heads, latent_dim=self.latent_dim // 2, output_dim=self.num_kp * 3, depth=3)
+        self.delta_decoder = LinearEncoder(input_dim=2 * self.num_heads, latent_dim=self.latent_dim // 2, output_dim=self.num_kp * 3, depth=3)
         
         init.kaiming_uniform_(self.codebook)
         init.constant_(self.codebook_pre_scale, 1)
@@ -339,7 +339,7 @@ class ExpTransformer(nn.Module):
             # noise = 0.1 * torch.rand(res['exp'].shape).to(res['exp'].device) * random_flag
             # res['exp'] = res['exp'] + noise
         if 'delta_style_code' in embedding and 'delta_exp_code' in embedding:
-            delta_latent = self.delta_heads_post_scale.unsqueeze(0).squeeze(2) * (embedding['delta_style_code'] * embedding['delta_exp_code']) # B x num_heads
+            delta_latent = self.delta_heads_post_scale.unsqueeze(0).squeeze(2) * torch.cat([embedding['delta_style_code'], embedding['delta_exp_code']], dim=1) # B x num_heads
             res['delta'] = self.delta_decoder(delta_latent).view(-1, self.num_kp, 3)
         return res
 

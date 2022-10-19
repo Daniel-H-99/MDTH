@@ -151,9 +151,9 @@ class LinearEncoder(nn.Module):
             self.layers.append(nn.Linear(self.input_dim, self.output_dim))
         else:
             self.layers.append(nn.Linear(self.input_dim, self.latent_dim))
-        for _ in range(self.depth - 1):
-            self.layers.append(nn.Linear(self.latent_dim, self.latent_dim))
-        self.layers.append(nn.Linear(self.latent_dim, self.output_dim))
+            for _ in range(self.depth - 1):
+                self.layers.append(nn.Linear(self.latent_dim, self.latent_dim))
+            self.layers.append(nn.Linear(self.latent_dim, self.output_dim))
 
     def forward(self, x):
         """

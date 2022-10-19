@@ -312,7 +312,7 @@ class ExpTransformer(nn.Module):
         # style_from_img = self.delta_style_extractor_from_img(exp_latent)
         style_from_mesh = self.delta_style_adain(mesh_flattened)
         # exp_from_img = self.delta_exp_extractor_from_img(exp_latent)
-        exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[17 * 3:])
+        exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
         
         # fused_style =  self.delta_fuser_style(torch.cat([style_from_img, style_from_mesh], dim=1))
         # fused_exp = self.delta_fuser_exp(torch.cat([exp_from_img, exp_from_mesh], dim=1))

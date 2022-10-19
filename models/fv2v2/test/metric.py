@@ -44,7 +44,7 @@ class DATASET(Dataset):
         return frame
     
     def __len__(self):
-        return lenn(self.frames)
+        return len(self.frames)
     
 class MetricEvaluater():
     def __init__(self, config, landmark_model=None):

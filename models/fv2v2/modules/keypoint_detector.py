@@ -275,8 +275,8 @@ class ExpTransformer(nn.Module):
         init.kaiming_uniform_(self.codebook)
         init.constant_(self.codebook_pre_scale, 1)
         init.constant_(self.codebook_post_scale, 1)
-        init.constant_(self.delta_heads_pre_scale, 1)
-        init.constant_(self.delta_heads_post_scale, 1)
+        init.constant_(self.delta_heads_pre_scale, 0)
+        init.constant_(self.delta_heads_post_scale, 0)
         # latent_dim = 2048
         
     # def split_embedding(self, img_embedding):
@@ -317,8 +317,9 @@ class ExpTransformer(nn.Module):
         # fused_style =  self.delta_fuser_style(torch.cat([style_from_img, style_from_mesh], dim=1))
         # fused_exp = self.delta_fuser_exp(torch.cat([exp_from_img, exp_from_mesh], dim=1))
         
-        delta_style_code = F.tanh(style_from_mesh)
-        delta_exp_code = F.tanh(exp_from_mesh * self.delta_heads_pre_scale.unsqueeze(0).squeeze(2))
+        # delta_style_code = F.tanh(style_from_mesh)
+        delta_style_code = style_from_mesh
+        delta_exp_code = F.tanh(10 * exp_from_mesh)
         
         return {'kp': kp, 'style': style, 'exp': exp_embedding, 'exp_code': exp_code, 'delta_style_code': delta_style_code , 'delta_exp_code': delta_exp_code}
 
@@ -340,7 +341,7 @@ class ExpTransformer(nn.Module):
             # noise = 0.1 * torch.rand(res['exp'].shape).to(res['exp'].device) * random_flag
             # res['exp'] = res['exp'] + noise
         if 'delta_style_code' in embedding and 'delta_exp_code' in embedding:
-            x = self.delta_heads_post_scale.squeeze(1).unsqueeze(0) * embedding['delta_exp_code'] # B x num_heads
+            x = torch.exp(self.delta_heads_post_scale).squeeze(1).unsqueeze(0) * embedding['delta_exp_code'] # B x num_heads
             styles = embedding['delta_style_code'] # B x num_decoding_layer
             for i, layer in enumerate(self.delta_decoder[:-1]):
                 x = self.delta_style_adain.normalize(F.leaky_relu(layer(x), 0.2), styles[:, i])

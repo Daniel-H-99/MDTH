@@ -180,7 +180,9 @@ class AdaIn(nn.Module):
     
     def forward(self, x):
         # x: B x condition_dim
-        return self.condition_encoder(x).view(len(x), -1, 2) # B x num_output x 2
+        x = self.condition_encoder(x).view(len(x), -1, 2) # B x num_output x 2
+        x[:, :, 1] = torch.exp(x[:, :, 1])
+        return x
     
     def normalize(self, x, params):
         # x: B x D

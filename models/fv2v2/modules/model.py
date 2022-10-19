@@ -1736,7 +1736,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'motion_section: {motion_section}')
                 # print(f'motion_section_GT : {motion_GT}')
                 
-                loss_values['motion_match'] = 0 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
+                loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
                                                 + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
                                                 + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 

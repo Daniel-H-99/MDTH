@@ -256,8 +256,8 @@ class ExpTransformer(nn.Module):
         )
 
 
-        self.delta_style_adain = AdaIn(condition_dim=3 * 68, num_output=3, depth=2)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        self.delta_style_adain = AdaIn(condition_dim=3 * 68, num_output=5, depth=5)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=5)
         # self.delta_style_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
         # self.delta_exp_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
         
@@ -270,7 +270,7 @@ class ExpTransformer(nn.Module):
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=self.num_heads, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=3).layers
+        self.delta_decoder = LinearEncoder(input_dim=self.num_heads, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=5).layers
         
         init.kaiming_uniform_(self.codebook)
         init.constant_(self.codebook_pre_scale, 1)
@@ -312,7 +312,7 @@ class ExpTransformer(nn.Module):
         # style_from_img = self.delta_style_extractor_from_img(exp_latent)
         style_from_mesh = self.delta_style_adain(mesh_flattened)
         # exp_from_img = self.delta_exp_extractor_from_img(exp_latent)
-        exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened)
+        exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[17 * 3:])
         
         # fused_style =  self.delta_fuser_style(torch.cat([style_from_img, style_from_mesh], dim=1))
         # fused_exp = self.delta_fuser_exp(torch.cat([exp_from_img, exp_from_mesh], dim=1))

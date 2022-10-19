@@ -217,11 +217,12 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, num_exp_heads, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_heads = num_heads
         self.code_dim = code_dim
         self.num_kp = num_kp
+        self.num_exp_heads = num_exp_heads
         self.input_dim = input_dim
         self.latent_dim = latent_dim
 
@@ -256,8 +257,9 @@ class ExpTransformer(nn.Module):
         )
 
 
-        self.delta_style_adain = AdaIn(condition_dim=3 * 68, num_output=5, depth=5)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=5)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=4)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_exp_heads, depth=4)
+        self.delta_exp_code_decoder = nn.Linear(self.num_exp_heads, self.latent_dim // 2)
         # self.delta_style_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
         # self.delta_exp_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
         
@@ -270,7 +272,10 @@ class ExpTransformer(nn.Module):
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=self.num_heads, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=5).layers
+        self.delta_decoder = nn.Sequential(
+            nn.BatchNorm1d(self.latent_dim),
+            LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=4)
+        )
         
         init.kaiming_uniform_(self.codebook)
         init.constant_(self.codebook_pre_scale, 1)
@@ -310,7 +315,7 @@ class ExpTransformer(nn.Module):
 
         mesh_flattened = x['mesh'].flatten(1)
         # style_from_img = self.delta_style_extractor_from_img(exp_latent)
-        style_from_mesh = self.delta_style_adain(mesh_flattened)
+        style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
         # exp_from_img = self.delta_exp_extractor_from_img(exp_latent)
         exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
         
@@ -319,7 +324,7 @@ class ExpTransformer(nn.Module):
         
         # delta_style_code = F.tanh(style_from_mesh)
         delta_style_code = style_from_mesh
-        delta_exp_code = F.tanh(10 * exp_from_mesh)
+        delta_exp_code = F.tanh(exp_from_mesh)
         
         return {'kp': kp, 'style': style, 'exp': exp_embedding, 'exp_code': exp_code, 'delta_style_code': delta_style_code , 'delta_exp_code': delta_exp_code}
 
@@ -341,12 +346,12 @@ class ExpTransformer(nn.Module):
             # noise = 0.1 * torch.rand(res['exp'].shape).to(res['exp'].device) * random_flag
             # res['exp'] = res['exp'] + noise
         if 'delta_style_code' in embedding and 'delta_exp_code' in embedding:
-            x = torch.exp(self.delta_heads_post_scale).squeeze(1).unsqueeze(0) * embedding['delta_exp_code'] # B x num_heads
-            styles = embedding['delta_style_code'] # B x num_decoding_layer
-            for i, layer in enumerate(self.delta_decoder[:-1]):
-                x = self.delta_style_adain.normalize(F.leaky_relu(layer(x), 0.2), styles[:, i])
-            res['delta'] = self.delta_decoder[-1](x).view(-1, self.num_kp, 3)
-            
+            x =  self.delta_exp_code_decoder(embedding['delta_exp_code']) # B x num_heads
+            style = embedding['delta_style_code'] # B x num_decoding_layer
+            x = torch.cat([x, style], dim=1)
+            x = self.delta_decoder(x).view(-1, self.num_kp, 3)
+            res['delta'] = x
+    
         return res
 
     def forward(self, src, drv):

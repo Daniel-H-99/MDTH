@@ -18,10 +18,10 @@ config:
                 model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000079-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/img_mesh_logloss.yaml'   
             generator:
-                model: '@checkpoint_path/MDTH/mesh_fc/00000039-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_fc/00000019-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_fc/mesh_img_self_c32_motion_stage2_bs16.yaml'          
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_fc/00000039-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_fc/00000019-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_fc/mesh_img_self_c32_motion_stage2_bs16.yaml'              
         attr:
             fps: 25
@@ -56,7 +56,7 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/pair_hetero.txt'
-    label: 'mesh_img_self_c32_stage2_mesh_fc_39_hetero_driving_code'
+    label: 'mesh_img_self_c32_stage2_mesh_fc_revised_19_hetero_driving_code'
     rewrite: True
     use_transformer: True
     extract_driving_code: True

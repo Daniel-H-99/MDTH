@@ -748,6 +748,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     # eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 2] =  eyes_drvn[0, LEFT_IRIS_LANDMARK_IDX, 2].squeeze()
     # eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 2] = eyes_drvn[0, RIGHT_IRIS_LANDMARK_IDX, 2].squeeze()
 
+    ref_nose = driving_landmarks_from_flame[0][27:36]
     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
         mesh = {}
@@ -765,7 +766,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
 
         target_landmarks = driving_landmark
-
+        target_landmarks[27:36] = ref_nose
         # mesh['value'] = source_mesh['value']
         mesh['value'] = target_landmarks.float() / SCALE
         mesh['raw_value'] = torch.tensor(source_landmarks['3d_landmarks_pose'])

@@ -257,7 +257,7 @@ class ExpTransformer(nn.Module):
         )
 
 
-        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=2)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
         self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_exp_heads, depth=2)
         self.delta_exp_code_decoder = nn.Linear(self.num_exp_heads, self.latent_dim // 2)
         # self.delta_style_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
@@ -272,7 +272,7 @@ class ExpTransformer(nn.Module):
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_exp_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_exp_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=4)
+        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=3)
         
         
         init.kaiming_uniform_(self.codebook)

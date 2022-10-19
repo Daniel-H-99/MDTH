@@ -497,26 +497,37 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
+                
 
             tf_output = exp_transformer({'img': source, 'mesh': _source_mesh['value']}, {'img': driving_frame, 'mesh': _driving_mesh['value']})
 
+            src_embedding = tf_output['src_embedding']
+            drv_embedding = tf_output['drv_embedding']
+            
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
-            src_exp = 0
-            drv_exp = 0
+            # src_exp = 0
+            # drv_exp = 0
             
             _source_mesh['exp'] = src_exp
             _driving_mesh['exp'] = drv_exp
             
+            delta_source_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': src_embedding['delta_exp_code']}
+            delta_driving_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': drv_embedding['delta_exp_code']}
+            
+            delta_src = exp_transformer.module.decode(delta_source_embedding)['delta']
+            delta_drv = exp_transformer.module.decode(delta_driving_embedding)['delta']
+            
             driving_codes.append(tf_output['drv_embedding']['exp_code'].detach().cpu().numpy())
 
             kp_canonical = {'value': tf_output['src_kp']}
-            kp_canonical_drv = {'value': tf_output['drv_kp']}
+            
+            _driving_mesh['exp'] = _source_mesh['exp'] - delta_src + delta_drv
             
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, _source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical_drv, _driving_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
             
             kp_norm = kp_driving
 

@@ -1602,6 +1602,9 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
+            src_exp = 0
+            drv_exp = 0
+            
             source_mesh['exp'] = src_exp
             driving_mesh['exp'] = drv_exp
 

@@ -507,8 +507,8 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
-            # src_exp = 0
-            # drv_exp = 0
+            src_exp = 0
+            drv_exp = 0
             
             _source_mesh['exp'] = src_exp
             _driving_mesh['exp'] = drv_exp
@@ -519,7 +519,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             delta_src = exp_transformer.module.decode(delta_source_embedding)['delta']
             delta_drv = exp_transformer.module.decode(delta_driving_embedding)['delta']
             
-            driving_codes.append(tf_output['drv_embedding']['exp_code'].detach().cpu().numpy())
+            driving_codes.append(tf_output['drv_embedding']['delta_exp_code'].detach().cpu().numpy())
 
             kp_canonical = {'value': tf_output['src_kp']}
             

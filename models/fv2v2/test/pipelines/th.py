@@ -30,7 +30,7 @@ class THPipeline():
         self.generator = export.load_generator(self.config.config.common.checkpoints.generator.config, self.config.config.common.checkpoints.generator.model, self.gpus)
         self.he_estimator = export.load_he_estimator(self.config.config.common.checkpoints.he_estimator.config, self.config.config.common.checkpoints.he_estimator.model, self.gpus)
         self.landmark_model = export.load_landmark_model(self.config.config.common.checkpoints.landmark_model.dir, self.gpus)
-        self.kp_extractor = export.load_kp_extractor(self.config.config.common.checkpoints.kp_extractor.config, self.config.config.common.checkpoints.kp_extractor.model, self.gpus)
+        self.kp_extractor = None
     def preprocess_image(self, img_name, rewrite=False):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir

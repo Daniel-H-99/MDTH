@@ -484,7 +484,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
 
         kp_source = preprocess_dict([source_mesh] * bs, device=device)
         
-        kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
+        # kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
         he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
 

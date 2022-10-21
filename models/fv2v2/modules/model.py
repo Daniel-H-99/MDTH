@@ -1434,7 +1434,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 
                 loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
                                                 + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
-                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
+                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
             if np.array(self.loss_weights['localized']).sum() != 0:
                 localized_loss = 0
@@ -1737,8 +1737,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'motion_section_GT : {motion_GT}')
                 
                 loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
-                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
-                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
+                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
+                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
             if np.array(self.loss_weights['localized']).sum() != 0:
                 localized_loss = 0

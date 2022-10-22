@@ -214,113 +214,114 @@ class FramesDataset3(Dataset):
     
     def __getitem__(self, idx):
         while True:
-            try:
-                idx = (idx + int(datetime.now().timestamp())) % (len(self.videos))
-                if self.is_train and self.id_sampling:
-                    id = list(self.videos.keys())[idx]
-                    name = str(np.random.choice(self.videos[id]))
-                    path = str(np.random.choice(glob.glob(os.path.join(self.root_dir, name))))
-                else:
-                    name = self.videos[idx]
-                    path = os.path.join(self.root_dir, name)
+            # try:
+            idx = (idx + int(datetime.now().timestamp())) % (len(self.videos))
+            if self.is_train and self.id_sampling:
+                id = list(self.videos.keys())[idx]
+                name = str(np.random.choice(self.videos[id]))
+                path = str(np.random.choice(glob.glob(os.path.join(self.root_dir, name))))
+            else:    
+                name = self.videos[idx]
+                path = os.path.join(self.root_dir, name)
 
-                # if self.is_train and os.path.isdir(path):
-                frames = os.listdir(path)
-                num_frames = len(frames)
-                frame_idx = np.sort(np.random.choice(num_frames, replace=False, size=2))
-                frame_idx[1] = (frame_idx[1] + 100) % num_frames
+            # if self.is_train and os.path.isdir(path):
+            frames = os.listdir(path)
+            print(f'path: {path}')
+            num_frames = len(frames)
+            frame_idx = np.sort(np.random.choice(num_frames, replace=False, size=2))
+            frame_idx[1] = (frame_idx[1] + 100) % num_frames
 
-                raw_video_array = [io.imread(os.path.join(path, frames[(idx + int(datetime.now().timestamp())) % num_frames])) for idx in frame_idx]
-                video_array = np.stack([cv2.resize(img_as_float32(frame), self.frame_shape[:2]) for frame in raw_video_array], axis=0)
+            raw_video_array = [io.imread(os.path.join(path, frames[(idx + int(datetime.now().timestamp())) % num_frames])) for idx in frame_idx]
+            video_array = np.stack([cv2.resize(img_as_float32(frame), self.frame_shape[:2]) for frame in raw_video_array], axis=0)
 
-                meshes = []
+            meshes = []
 
-                for i, frame in enumerate(video_array):
-                    L = self.frame_shape[0]
-                    mesh, noise, normalizer = self.extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
-                    A = np.array([[-1, -1, 0]], dtype='float32') # 3 x 1
-                    # mesh = {}
+            for i, frame in enumerate(video_array):
+                L = self.frame_shape[0]
+                mesh, noise, normalizer = self.extract_openface_mesh(img_as_ubyte(frame)) # {value (N x 3), R (3 x 3), t(3 x 1), c1}
+                A = np.array([[-1, -1, 0]], dtype='float32') # 3 x 1
+                # mesh = {}
 
-                    mesh_mp = extract_mesh(img_as_ubyte(frame))
-                    right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
-                    left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
-                    # print(f'right_iris shape: {right_iris.shape}')
-                    # mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
-                    # mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
-                    # print(f'right_iris: {mesh["value"][3]}')
-                    # print(f'right_iris: {mesh["value"][3]}')
-                    # print(f'right_eye: {mesh["value"][36:42].mean(axis=0)}')
-                    # mesh_mp['raw_value'][:, 2] = mesh_mp['raw_value'][:, 2]
-                    mesh_mp['_raw_value'] = mesh_mp['raw_value'].clone().detach()
+                mesh_mp = extract_mesh(img_as_ubyte(frame))
+                right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
+                left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
+                # print(f'right_iris shape: {right_iris.shape}')
+                # mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
+                # mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
+                # print(f'right_iris: {mesh["value"][3]}')
+                # print(f'right_iris: {mesh["value"][3]}')
+                # print(f'right_eye: {mesh["value"][36:42].mean(axis=0)}')
+                # mesh_mp['raw_value'][:, 2] = mesh_mp['raw_value'][:, 2]
+                mesh_mp['_raw_value'] = mesh_mp['raw_value'].clone().detach()
 
 
-                    # if noise is not None:
-                    #     mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
-                    #     # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
-                    #     # print(f'onise: {noise[0]}')
-                    #     # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
-                    #     # print(f'mesh open right: {mesh["raw_value"][36:42]}')
-                    #     mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
-                    #     mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
+                # if noise is not None:
+                #     mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
+                #     # print(f"right: {mesh_mp['raw_value'][RIGHT_EYE_IDX+RIGHT_EYEBROW_IDX]}")
+                #     # print(f'onise: {noise[0]}')
+                #     # print(f"left: {mesh_mp['raw_value'][LEFT_EYE_IDX+LEFT_EYEBROW_IDX]}")
+                #     # print(f'mesh open right: {mesh["raw_value"][36:42]}')
+                #     mesh_mp['raw_value'][LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX] += torch.tensor(noise[[1]])
+                #     mesh_mp['raw_value'][OUT_LIP_IDX+IN_LIP_IDX] += torch.tensor(noise[[2]])
 
-                    # print(f'value: {mesh["raw_value"][36:42]} ')
-                    # print(f'mp value: {mesh_mp["raw_value"][RIGHT_EYE_IDX]}')
-                    # mesh['value'] = np.array(mesh['value'], dtype='float32') * 2 / L  + np.squeeze(A, axis=-1)[None]
-                    # mesh['R'] = np.array(mesh['R'], dtype='float32')
-                    # mesh['c'] = np.array(mesh['c'], dtype='float32')
-                    # t = np.array(mesh['t'], dtype='float32')
-                    # mesh['t'] = (np.eye(3).astype(np.float32) - mesh['c'] * mesh['R']) @ A + t * 2 / L
-                    # # print('checkpoint 1')
+                # print(f'value: {mesh["raw_value"][36:42]} ')
+                # print(f'mp value: {mesh_mp["raw_value"][RIGHT_EYE_IDX]}')
+                # mesh['value'] = np.array(mesh['value'], dtype='float32') * 2 / L  + np.squeeze(A, axis=-1)[None]
+                # mesh['R'] = np.array(mesh['R'], dtype='float32')
+                # mesh['c'] = np.array(mesh['c'], dtype='float32')
+                # t = np.array(mesh['t'], dtype='float32')
+                # mesh['t'] = (np.eye(3).astype(np.float32) - mesh['c'] * mesh['R']) @ A + t * 2 / L
+                # # print('checkpoint 1')
 
-                    # mesh['mesh_img'] = (get_mesh_image(mesh['raw_value'], self.frame_shape)[:, :, [0]] / 255.0).transpose((2, 0, 1))
-                    MP_SECTIONS_CONFIG = [LEFT_EYEBROW_IDX, LEFT_EYE_IDX, LEFT_IRIS_IDX, RIGHT_EYEBROW_IDX, RIGHT_EYE_IDX, RIGHT_IRIS_IDX, OUT_LIP_IDX, IN_LIP_IDX]
-                    MP_SECTIONS =  LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX + OUT_LIP_IDX + IN_LIP_IDX
+                # mesh['mesh_img'] = (get_mesh_image(mesh['raw_value'], self.frame_shape)[:, :, [0]] / 255.0).transpose((2, 0, 1))
+                MP_SECTIONS_CONFIG = [LEFT_EYEBROW_IDX, LEFT_EYE_IDX, LEFT_IRIS_IDX, RIGHT_EYEBROW_IDX, RIGHT_EYE_IDX, RIGHT_IRIS_IDX, OUT_LIP_IDX, IN_LIP_IDX]
+                MP_SECTIONS =  LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX + OUT_LIP_IDX + IN_LIP_IDX
 
-                    mesh['MP_SECTIONS'] = MP_SECTIONS
-                    mesh['MP_EYE_SECTIONS'] = LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX
-                    mesh['MP_MOUTH_SECTIONS'] = OUT_LIP_IDX + IN_LIP_IDX
-                    
-                    mesh['mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
-                    mesh['_mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['_raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
-                    # mesh['raw_value'] = mesh_mp['raw_value'] * 2 / L + A
-                    # mesh['_raw_value'] = mesh_mp['_raw_value'] * 2 / L + A
-
-                    # print('msh img sec got')
-                    # print(f'mp sections: {MP_SECTIONS}')
-                    # print(f'mesh mp shape: {mesh_mp["raw_value"].shape}')
-                    mesh['section_landmarks'] = mesh_mp["raw_value"][MP_SECTIONS] * 2 / L + A
-                    # mesh['mouth_img'] = self.get_mouth_image(mesh['raw_value'].numpy())
-                    # print(f'mouth image shape: {mesh["mouth_img"].shape}')
-                    # mouth_center = mesh['raw_value'][-20:, :2].mean(dim=0) # 2
-                    # mouth_corner = (mouth_center - np.array([[L // 4, L // 4]])).clip(min=0)
-                    # print(f"mp_raw_value: {mesh_mp['raw_value'][OUT_LIP_IDX] * 2 / L + A}")
-                    # print(f"raw_value: {mesh['raw_value'][48:] * 2 / L + A}")
-                    # print(f"value: {mesh['value'][48:]}")
-
-                    # mesh['raw_value'] = np.array(mesh_mp['raw_value'], dtype='float32') * 2 / L + A
-                    
-                    ### use openface raw value
-                    mesh['raw_value'] = np.array(mesh['raw_value'], dtype='float32') * 2 / L + A
-                    mesh['OPENFACE_EYE_IDX'] = OPENFACE_EYE_IDX
-                    mesh['OPENFACE_LIP_IDX'] = OPENFACE_LIP_IDX
-                    
-                    # print('checkpoint 2')
-                    # print(f'data type: {mesh["value"].dtype}')
-                    meshes.append(mesh)
-                    
-                # ### Make intermediate target mesh ###
-                # src_mesh = meshes[0]
-                # drv_mesh = meshes[1]
-                # target_mesh = (1 / src_mesh['c'][np.newaxis, np.newaxis]) * np.einsum('ij,nj->ni', np.linalg.inv(src_mesh['R']), drv_mesh['value'] - src_mesh['t'][np.newaxis, :, 0])
-                # drv_mesh['intermediate_value'] = target_mesh
-                # target_mesh = L * (target_mesh - np.squeeze(A, axis=-1)[None]) // 2
-                # drv_mesh['intermediate_mesh_img_sec'] = self.get_mesh_image_section(target_mesh)
+                mesh['MP_SECTIONS'] = MP_SECTIONS
+                mesh['MP_EYE_SECTIONS'] = LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX
+                mesh['MP_MOUTH_SECTIONS'] = OUT_LIP_IDX + IN_LIP_IDX
                 
-                break
+                mesh['mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
+                mesh['_mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['_raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
+                # mesh['raw_value'] = mesh_mp['raw_value'] * 2 / L + A
+                # mesh['_raw_value'] = mesh_mp['_raw_value'] * 2 / L + A
+
+                # print('msh img sec got')
+                # print(f'mp sections: {MP_SECTIONS}')
+                # print(f'mesh mp shape: {mesh_mp["raw_value"].shape}')
+                mesh['section_landmarks'] = mesh_mp["raw_value"][MP_SECTIONS] * 2 / L + A
+                # mesh['mouth_img'] = self.get_mouth_image(mesh['raw_value'].numpy())
+                # print(f'mouth image shape: {mesh["mouth_img"].shape}')
+                # mouth_center = mesh['raw_value'][-20:, :2].mean(dim=0) # 2
+                # mouth_corner = (mouth_center - np.array([[L // 4, L // 4]])).clip(min=0)
+                # print(f"mp_raw_value: {mesh_mp['raw_value'][OUT_LIP_IDX] * 2 / L + A}")
+                # print(f"raw_value: {mesh['raw_value'][48:] * 2 / L + A}")
+                # print(f"value: {mesh['value'][48:]}")
+
+                # mesh['raw_value'] = np.array(mesh_mp['raw_value'], dtype='float32') * 2 / L + A
+                
+                ### use openface raw value
+                mesh['raw_value'] = np.array(mesh['raw_value'], dtype='float32') * 2 / L + A
+                mesh['OPENFACE_EYE_IDX'] = OPENFACE_EYE_IDX
+                mesh['OPENFACE_LIP_IDX'] = OPENFACE_LIP_IDX
+                
+                # print('checkpoint 2')
+                # print(f'data type: {mesh["value"].dtype}')
+                meshes.append(mesh)
+                
+            # ### Make intermediate target mesh ###
+            # src_mesh = meshes[0]
+            # drv_mesh = meshes[1]
+            # target_mesh = (1 / src_mesh['c'][np.newaxis, np.newaxis]) * np.einsum('ij,nj->ni', np.linalg.inv(src_mesh['R']), drv_mesh['value'] - src_mesh['t'][np.newaxis, :, 0])
+            # drv_mesh['intermediate_value'] = target_mesh
+            # target_mesh = L * (target_mesh - np.squeeze(A, axis=-1)[None]) // 2
+            # drv_mesh['intermediate_mesh_img_sec'] = self.get_mesh_image_section(target_mesh)
             
-            except Exception as e:
-                print(f'error: {e}')
-                continue
+            break
+            
+            # except Exception as e:
+            #     print(f'error: {e}')
+            #     continue
             
             
         out = {}
@@ -395,73 +396,73 @@ class FramesDataset4(Dataset):
 
     def __getitem__(self, idx):
         while True:
-            try:
-                magic_num = int(datetime.now().timestamp())
-                idx = (idx + magic_num) % (len(self.videos))
-                id = self.videos[idx]
-                chunk = np.random.choice(list(filter(lambda x: '.mp4' not in x and '.wav' not in x, os.listdir((os.path.join(self.root_dir, id))))))
-                path = os.path.join(self.root_dir, id, chunk)
-                if self.cache is not None:
-                    rel_path = os.path.relpath(path, self._root_dir)
-                    cache_path = os.path.join(self.cache, rel_path)
-                    if not os.path.exists(cache_path):
-                        hit = False
-                        # print(f'loading to cache: {cache_path}')
-                        t = time.time()
-                        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-                        shutil.copytree(path, cache_path)
-                        t = time.time() - t
-                        # print(f'loaded to cache ({t}): {cache_path}')
-                    else:
-                        hit = True
-                        # print(f'cache hit: {cache_path}')
-                    path = cache_path
+            # try:
+            magic_num = int(datetime.now().timestamp())
+            idx = (idx + magic_num) % (len(self.videos))
+            id = self.videos[idx]
+            chunk = np.random.choice(list(filter(lambda x: '.mp4' not in x and '.wav' not in x, os.listdir((os.path.join(self.root_dir, id))))))
+            path = os.path.join(self.root_dir, id, chunk)
+            if self.cache is not None:
+                rel_path = os.path.relpath(path, self._root_dir)
+                cache_path = os.path.join(self.cache, rel_path)
+                if not os.path.exists(cache_path):
+                    hit = False
+                    # print(f'loading to cache: {cache_path}')
+                    t = time.time()
+                    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                    shutil.copytree(path, cache_path)
+                    t = time.time() - t
+                    # print(f'loaded to cache ({t}): {cache_path}')
+                else:
+                    hit = True
+                    # print(f'cache hit: {cache_path}')
+                path = cache_path
 
-                frames_dir = os.path.join(path, 'frames')
-                faces_path = os.path.join(path, 'faces.pckl')
+            frames_dir = os.path.join(path, 'frames')
+            faces_path = os.path.join(path, 'faces.pckl')
 
-                with open(faces_path, 'rb') as f:
-                    faces = pkl.load(f)
+            with open(faces_path, 'rb') as f:
+                faces = pkl.load(f)
 
-                num_frames = len(faces)
-                
-                item_indice = np.random.choice(num_frames, replace=False, size=2)
-                item_indice[1] = (item_indice[1] + magic_num) % num_frames
-
-                video_array = []
-
-                bboxes = []
-                for item_idx in item_indice:
-                    item = faces[item_idx][0]  # frame, bbox, conf
-                    fid = item['frame']
-                    bbox = item['bbox']
-                    frame_path = os.path.join(frames_dir, "{:05d}.jpg".format(fid + 1))
-                    frame = io.imread(frame_path)
-                    x1, y1, x2, y2 = extend_bbox(bbox, frame)
-                    bboxes.append([x1, y1, x2, y2])
-                bboxes = np.array(bboxes)
-                bbox_united = bboxes.mean(axis=0)
-                x1, y1, x2, y2 = bbox_united.astype(int)
-
-                for item_idx in item_indice:
-                    item = faces[item_idx][0]  # frame, bbox, conf
-                    fid = item['frame']
-                    frame_path = os.path.join(frames_dir, "{:05d}.jpg".format(fid + 1))
-                    frame = io.imread(frame_path)
-                    cropped = frame[y1:y2, x1:x2]
-                    cropped_scaled = cv2.resize(img_as_float32(cropped), self.frame_shape[:2])
-                    video_array.append(cropped_scaled)
-
-                video_array = np.stack(video_array, axis=0)
-
-                if self.transform is not None:
-                    video_array = self.transform(video_array)
-
-                break
+            num_frames = len(faces)
             
-            except Exception as e:
-                print(f'error: {e}')
-                continue
+            item_indice = np.random.choice(num_frames, replace=False, size=2)
+            item_indice[1] = (item_indice[1] + magic_num) % num_frames
+
+            video_array = []
+
+            bboxes = []
+            for item_idx in item_indice:
+                item = faces[item_idx][0]  # frame, bbox, conf
+                fid = item['frame']
+                bbox = item['bbox']
+                frame_path = os.path.join(frames_dir, "{:05d}.jpg".format(fid + 1))
+                frame = io.imread(frame_path)
+                x1, y1, x2, y2 = extend_bbox(bbox, frame)
+                bboxes.append([x1, y1, x2, y2])
+            bboxes = np.array(bboxes)
+            bbox_united = bboxes.mean(axis=0)
+            x1, y1, x2, y2 = bbox_united.astype(int)
+
+            for item_idx in item_indice:
+                item = faces[item_idx][0]  # frame, bbox, conf
+                fid = item['frame']
+                frame_path = os.path.join(frames_dir, "{:05d}.jpg".format(fid + 1))
+                frame = io.imread(frame_path)
+                cropped = frame[y1:y2, x1:x2]
+                cropped_scaled = cv2.resize(img_as_float32(cropped), self.frame_shape[:2])
+                video_array.append(cropped_scaled)
+
+            video_array = np.stack(video_array, axis=0)
+
+            if self.transform is not None:
+                video_array = self.transform(video_array)
+
+            break
+            
+            # except Exception as e:
+            #     print(f'error: {e}')
+            #     continue
             
             
         out = {}

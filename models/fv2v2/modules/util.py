@@ -233,8 +233,8 @@ class MeshEncoder(nn.Module):
         self.register_buffer("stddev", torch.ones(shape) if stddev is None else stddev.view(shape))
 
         self.layers = torch.nn.ModuleList([
-            torch.nn.Linear(self.n_vertices * 3, 256),
-            torch.nn.Linear(256, self.latent_dim),
+            torch.nn.Linear(self.n_vertices * 3, self.latent_dim),
+            torch.nn.Linear(self.latent_dim, self.latent_dim),
         ])
 
         self.code = torch.nn.Linear(self.latent_dim, self.latent_dim)

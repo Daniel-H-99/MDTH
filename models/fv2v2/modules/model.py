@@ -1262,11 +1262,6 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         for p in generator.parameters():
             p.requires_grad = True
 
-
-        # he_estimator.train()
-        # for p in he_estimator.parameters():
-        #     p.requires_grad = True
-
         self.stage = stage
 
 
@@ -1296,25 +1291,11 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             loss_values = {}
             
             bs = len(x['source'])
-            
-            # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
-            # he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            # he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
             
-            # driving_mesh['scale'] = source_mesh['scale']
-            # driving_mesh['U'] = np.source_mesh['U']
-            
-            tf_output = self.exp_transformer({'img': x['source'], 'mesh': source_mesh['value']}, {'img': x['driving'], 'mesh': driving_mesh['value']})
-
-            src_exp = tf_output['src_exp']
-            drv_exp = tf_output['drv_exp']
-
-            source_mesh['exp'] = src_exp
-            driving_mesh['exp'] = drv_exp
+            tf_output = self.exp_transformer({'mesh': source_mesh['value']}, {'mesh': driving_mesh['value']})
 
             kp_canonical = {'value': tf_output['src_kp']}
             kp_canonical_drv = {'value': tf_output['drv_kp']}
@@ -1327,44 +1308,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
             kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
             kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
-            # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
-            # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
-
             
-            # driving_224 = x['hopenet_driving']
-            # yaw_gt, pitch_gt, roll_gt = self.hopenet(driving_224)
 
-            # reg = self.regularize(kp_canonical_source, kp_canonical_driving) # regularizor loss
-
-
-            
-            # x_reg = kp_canonical['value'].flatten(1)
-            # for x_i in x_reg:
-            #     self.pca_x.register(x_i.detach().cpu())
-            # if self.pca_x.steps > 2:
-            #     mu_x, u_x, s_x = self.pca_x.get_state(device='cuda')
-            #     loss_reg = ((x_reg - mu_x[None]).unsqueeze(1) @ ((u_x @ (s_x ** 2) @ u_x.t())[None] + self.sigma_err[None]).inverse() @ (x_reg - mu_x[None]).unsqueeze(2)).mean() # 1
-            #     loss['regularizor'] = self.loss_weights['regularizor'] * loss_reg
-            #     self.mu_x, self.u_x, self.s_x = self.pca_x.get_state()
-            # else:
-            #     loss['regularizor'] = self.loss_weights['regularizor'] * torch.zeros(1).cuda().mean()
-
-            # if self.pca_x.steps * self.pca_e.steps > 0:
-            #     kp_source, kp_driving = reg['kp_source'], reg['kp_driving']
-            #     loss = {k: self.loss_weights[k] * v for k, v in reg['loss'].items()}
-            # else:
-            #     kp_source, kp_driving = kp_canonical_source, kp_canonical_driving
-            #     loss = {k: self.loss_weights[k] * torch.zeros(1).cuda() for k, v in reg['loss'].items()}
-
-
-            # {'value': value, 'jacobian': jacobian}
-            # kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
-            # kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
-
-            
-            # print('entering generator')
-            # print(f'kp_source value: {kp_source["value"]}')
-            # print(f'kp_driving value: {kp_driving["value"]}')
             
             generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
             generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
@@ -1376,22 +1321,22 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             generated['source_mesh_image'] = kp_source['mesh_img_sec']
             generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
             
-            if cycled_drive:
-                ## cycled expression drive
-                src_style = tf_output['src_embedding']['style']
-                src_exp_code_decoded = tf_output['drv_embedding']['exp']
-                src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
-                cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
-                src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
+            # if cycled_drive:
+            #     ## cycled expression drive
+            #     src_style = tf_output['src_embedding']['style']
+            #     src_exp_code_decoded = tf_output['drv_embedding']['exp']
+            #     src_exp_code_cycled_decoded = torch.cat([src_exp_code_decoded[1:], src_exp_code_decoded[[0]]], dim=0)
+            #     cycled_embedding = {'style': src_style, 'exp': src_exp_code_cycled_decoded}
+            #     src_exp_cycled = self.exp_transformer.decode(cycled_embedding)['exp']
 
-                source_mesh_cycled = {'U': torch.cat([driving_mesh['U'][1:], driving_mesh['U'][[0]]], dim=0), 'scale': torch.cat([driving_mesh['scale'][1:], driving_mesh['scale'][[0]]], dim=0), 'exp': src_exp_cycled}
+            #     source_mesh_cycled = {'U': torch.cat([driving_mesh['U'][1:], driving_mesh['U'][[0]]], dim=0), 'scale': torch.cat([driving_mesh['scale'][1:], driving_mesh['scale'][[0]]], dim=0), 'exp': src_exp_cycled}
  
-                kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
+            #     kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 
-                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
-                for k, v in list(generated_cycled.items()):
-                    generated[f'{k}_cycled'] = v
-                generated['kp_driving_cycled'] = kp_source_cycled
+            #     generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
+            #     for k, v in list(generated_cycled.items()):
+            #         generated[f'{k}_cycled'] = v
+            #     generated['kp_driving_cycled'] = kp_source_cycled
                 
 
             if self.loss_weights['log'] != 0:

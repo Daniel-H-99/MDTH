@@ -217,132 +217,53 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, num_exp_heads, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_heads = num_heads
-        self.code_dim = code_dim
         self.num_kp = num_kp
-        self.num_exp_heads = num_exp_heads
         self.input_dim = input_dim
         self.latent_dim = latent_dim
-
-        self.exp_encoder = nn.Sequential(
-            ResnetEncoder(),
-            nn.LeakyReLU(0.2),
-            nn.Linear(2048, self.latent_dim // 2)
-        )
         
         self.id_encoder = MeshEncoder(num_kp=self.num_kp, latent_dim=latent_dim)
         self.kp_decoder = nn.Sequential(
             nn.Linear(self.latent_dim, self.num_kp * 3),
             nn.Tanh()
         )
-        
-        self.style_decoder = nn.Linear(self.latent_dim, self.latent_dim // 2)
 
-        self.vq_exp = BiCategoricalEncodingLayer(self.latent_dim // 2, self.num_heads)
-        self.codebook = nn.Parameter(torch.zeros(self.num_heads, self.code_dim).requires_grad_(True))
-        self.codebook_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
-        self.codebook_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
-        self.fuser = nn.Sequential(
-            nn.Linear(self.latent_dim // 2 + self.num_heads * self.code_dim, self.latent_dim),
-            nn.LeakyReLU(0.2),
-            nn.Linear(self.latent_dim, self.latent_dim),
-            nn.LeakyReLU(0.2),
-            nn.Linear(self.latent_dim, self.latent_dim)
-        )
- 
-        self.exp_decoder = nn.Sequential(
-            nn.Linear(self.latent_dim, 3*num_kp),
-        )
 
 
         self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_exp_heads, depth=2)
-        self.delta_exp_code_decoder = nn.Linear(self.num_exp_heads, self.latent_dim // 2)
-        # self.delta_style_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
-        # self.delta_exp_extractor_from_img = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim // 2, depth=0)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
         
-        # self.delta_fuser_style = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
-        # self.delta_fuser_exp = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim // 2, depth=1)
-        
-        # self.delta_exp_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
-        # self.delta_style_heads = LinearEncoder(input_dim=self.latent_dim // 2, output_dim=self.num_heads, depth=0)
-        
-        self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_exp_heads, 1).requires_grad_(True))
-        self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_exp_heads, 1).requires_grad_(True))
+        self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
+        self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         
         self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=3)
         
-        
-        init.kaiming_uniform_(self.codebook)
-        init.constant_(self.codebook_pre_scale, 1)
-        init.constant_(self.codebook_post_scale, 1)
         init.constant_(self.delta_heads_pre_scale, 0)
         init.constant_(self.delta_heads_post_scale, 0)
         # latent_dim = 2048
         
-    # def split_embedding(self, img_embedding):
-    #     style_embedding, exp_embedding = img_embedding.split([self.latent_dim // 2, self.latent_dim // 2], dim=1)
-    #     exp_code = F.tanh(torch.einsum('bk,kp->bkp', self.vq_exp(exp_embedding), self.codebook_pre_scale).squeeze(2))  # B x num_heads
-    #     exp_embedding = self.decode_exp_code(exp_code)
-
-    #     return {'style': style_embedding, 'exp': exp_embedding, 'exp_code': exp_code}
-
-    def decode_exp_code(self, exp_code):
-        # exp_code: B x num_heads: [-1, 1] codesW
-        exp_embedding = torch.einsum('bk,kp->bkp', exp_code, self.codebook_post_scale * F.normalize(self.codebook))
-        exp_embedding = exp_embedding.flatten(1)
-        return exp_embedding
-
-    def fuse(self, style, exp):
-        input = torch.cat([style, exp], dim=1)
-        output = self.fuser(input)
-        return output
-
     def encode(self, x):
-        exp_latent = self.exp_encoder[0](x['img'])
-        exp_embedding = self.exp_encoder[1:](exp_latent)
         id_embedding = self.id_encoder(x['mesh'])
         id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
-        exp_code = F.tanh(torch.einsum('bk,kp->bkp', self.vq_exp(exp_embedding), self.codebook_pre_scale).squeeze(2))  # B x num_heads
-        exp_embedding = self.decode_exp_code(exp_code)
-
-        kp = id_embedding
-        style = F.normalize(self.style_decoder(id_embedding), dim=-1)
 
         mesh_flattened = x['mesh'].flatten(1)
-        # style_from_img = self.delta_style_extractor_from_img(exp_latent)
         style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
-        # exp_from_img = self.delta_exp_extractor_from_img(exp_latent)
         exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
         
-        # fused_style =  self.delta_fuser_style(torch.cat([style_from_img, style_from_mesh], dim=1))
-        # fused_exp = self.delta_fuser_exp(torch.cat([exp_from_img, exp_from_mesh], dim=1))
-        
-        # delta_style_code = F.tanh(style_from_mesh)
         delta_style_code = style_from_mesh
         delta_exp_code = F.tanh(torch.exp(self.delta_heads_pre_scale / 10).unsqueeze(0).squeeze(2) * exp_from_mesh)
         
-        return {'kp': kp, 'style': style, 'exp': exp_embedding, 'exp_code': exp_code, 'delta_style_code': delta_style_code , 'delta_exp_code': delta_exp_code}
+        return {'kp': kp, 'delta_style_code': delta_style_code , 'delta_exp_code': delta_exp_code}
 
-    # def kp_encode(self, x):
-    #     embedding = F.leaky_relu(self.kp_encoder(x), 0.2)
-    #     return embedding
-
-    # def kp_decode(self, x):
-    #     return self.kp_decoder(x).view(-1, self.num_kp, 3)
-        
     def decode(self, embedding):
         res = {}
         if 'kp' in embedding:
             res['kp'] = 2 * self.kp_decoder(embedding['kp']).view(len(embedding['kp']), -1, 3)
             res['kp'][:, :, 2] = res['kp'][:, :, 2] - 0.33
-        if 'style' in embedding and 'exp' in embedding:
-            res['exp'] = self.exp_decoder(self.fuse(embedding['style'], embedding['exp'])).view(len(embedding['style']), -1, 3)
-            # random_flag = torch.rand(res['exp'].shape).to(res['exp'].device) >= 0.5
-            # noise = 0.1 * torch.rand(res['exp'].shape).to(res['exp'].device) * random_flag
-            # res['exp'] = res['exp'] + noise
+            
         if 'delta_style_code' in embedding and 'delta_exp_code' in embedding:
             x =  self.delta_exp_code_decoder(torch.exp(self.delta_heads_post_scale / 10).unsqueeze(0).squeeze(2) * embedding['delta_exp_code']) # B x num_heads
             style = embedding['delta_style_code'] # B x num_decoding_layer
@@ -360,7 +281,7 @@ class ExpTransformer(nn.Module):
         drv_output = self.decode(drv_embedding)
         # drv_output = self.decode({'kp': src_embedding['kp'], 'style': src_embedding['style'], 'exp': drv_embedding['exp']})
 
-        return {'src_exp': src_output['exp'], 'drv_exp': drv_output['exp'], 'src_embedding': src_embedding, 'drv_embedding': drv_embedding, 'src_kp': src_output['kp'], 'drv_kp': drv_output['kp']}
+        return {'src_embedding': src_embedding, 'drv_embedding': drv_embedding, 'src_kp': src_output['kp'], 'drv_kp': drv_output['kp']}
 
 class HEEstimator(nn.Module):
     """

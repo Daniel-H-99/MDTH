@@ -70,6 +70,7 @@ def load_exp_transformer(config, checkpoint_path, gpu=[0]):
         config = yaml.load(f, Loader=yaml.FullLoader)
     exp_transformer = ExpTransformer(**config['model_params']['exp_transformer_params'], 
                                      **config['model_params']['common_params'])
+    print(f'gpu: {gpu[0]}')
     exp_transformer = exp_transformer.to(gpu[0])
     checkpoint = torch.load(checkpoint_path, map_location=f'cuda:{gpu[0]}')
     exp_transformer.load_state_dict(checkpoint['exp_transformer'])

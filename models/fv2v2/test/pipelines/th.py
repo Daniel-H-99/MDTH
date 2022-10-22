@@ -17,6 +17,7 @@ class THPipeline():
     def __init__(self, config, gpus):
         self.config = config
         self.gpus = gpus
+        print(f'gputs: {self.gpus}')
         self.initialize()
         
     def process_name(self, name):

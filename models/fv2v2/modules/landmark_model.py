@@ -16,6 +16,7 @@ from tqdm import tqdm
 from skimage.transform import resize
 from skimage import img_as_ubyte, img_as_float32
 from PIL import Image
+import shutil
 
 # from batch_face import RetinaFace, LandmarkPredictor
 
@@ -170,10 +171,19 @@ class LandmarkModel():
             break
 
     def preprocess_video(self, inp, output, image_shape=(256, 256), increase=0.2, iou_with_initial=0.25, min_frames=1):
+        if os.path.exists(output):
+            return output
+        
         tmp_dir = os.path.join(os.path.dirname(output), 'preprocess_video_tmp')
         if not os.path.exists(tmp_dir):
             os.makedirs(tmp_dir)
-
+            
+        frames_dir = os.path.join(os.path.dirname(output), 'frames')
+        # if os.path.exists(frames_dir):
+        #     shutil.rmtree(frames_dir)
+        os.makedirs(frames_dir)
+        
+        
         fa = self.fa
         video = imageio.get_reader(inp)
 
@@ -239,6 +249,7 @@ class LandmarkModel():
         concat_cmd = 'concat:' + '|'.join([os.path.join(tmp_dir, '{:05d}.mp4'.format(i)) for i in range(len(cmd_strings))])
         os.system(f'ffmpeg -y -i "{concat_cmd}" -c copy {output}')
 
+
         return output
 
     def get_landmarks_fa(self, frame):
@@ -264,7 +275,7 @@ class LandmarkModel():
         frame_landmarks = np.stack([frame_landmarks[:, 0].clip(0, H - 1), frame_landmarks[:, 1].clip(0, W - 1)], axis=1)
         return (bb, frame_landmarks)
 
-    def normalize_mesh(self, landmarks, image_height, image_width, z_mean=0, R_noise=None, t_noise=None):
+    def normalize_mesh(self, landmarks, image_height, image_width, z_mean=None, R_noise=None, t_noise=None):
         eos_landmarks = []
         # print(f'landmarks: {landmarks}')
         # print(f'image size: {image_height}, {image_width}')
@@ -290,13 +301,14 @@ class LandmarkModel():
         # if t_noise is not None:
         #     viewport[:3, 3] += t_noise * (2 * np.random.rand(3) - 1)
             
-        # if R_noise:
-        #     noise_euler = R_noise * np.pi * (2 * np.random.rand(3) - 1)
-        #     noise_matrix = euler2matrix(noise_euler)
-        #     view[:3, :3] = noise_matrix @ view[:3, :3]
+        if R_noise:
+            noise_euler = R_noise * np.pi * (2 * np.random.rand(3) - 1)
+            noise_matrix = euler2matrix(noise_euler)
+            view[:3, :3] = noise_matrix @ view[:3, :3]
         
         # if t_noise is not None:
-        #     viewport[:3, 3] += t_noise * (2 * np.random.rand(3) - 1)
+        #     viewport[:3, 3] += t_noise * np.random.randn(3)
+        
         # # print(f'view: {view}')
         # print(f'view rot: {matrix2euler(view[:3, :3])}')
         # while True:

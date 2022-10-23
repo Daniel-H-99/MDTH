@@ -1,3 +1,4 @@
+from logging import PlaceHolder
 from torch import nn
 import torch
 import torch.nn.functional as F
@@ -169,8 +170,11 @@ def get_rotation_matrix(yaw, pitch, roll):
 def keypoint_transformation(kp_canonical, mesh):
     device = kp_canonical['value'].device
     
-    kp_normed = kp_canonical['value'] + mesh['exp']
-
+    if 'delta' in mesh:
+        kp_normed = kp_canonical['value'] + mesh['delta']
+    else:
+        kp_normed = kp_canonical['value']
+        
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
@@ -1295,11 +1299,12 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
             
-            tf_output = self.exp_transformer({'mesh': source_mesh['value']}, {'mesh': driving_mesh['value']})
+            tf_output = self.exp_transformer({'mesh': source_mesh['value']}, {'mesh': driving_mesh['value']}, placeholder=['kp'])
 
             kp_canonical = {'value': tf_output['src_kp']}
             kp_canonical_drv = {'value': tf_output['drv_kp']}
 
+            
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
             kp_driving = keypoint_transformation(kp_canonical_drv, driving_mesh)

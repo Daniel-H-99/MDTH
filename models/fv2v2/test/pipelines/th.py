@@ -79,7 +79,7 @@ class THPipeline():
                 imageio.imwrite(os.path.join(frames_dir, '{:05d}.png'.format(i)), frame)
             
 
-    def inference(self, src_name, drv_name, output_dir, use_transformer=True, extract_driving_code=False):
+    def inference(self, src_name, drv_name, output_dir, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
         src_name = self.process_name(src_name)
         drv_name = self.process_name(drv_name)
         output_name = '_'.join([src_name, drv_name])
@@ -89,10 +89,11 @@ class THPipeline():
         drv_path = os.path.join(input_dir, drv_name)
         output_path = os.path.join(output_dir, output_name)
         output_file_path = os.path.join(output_path, output_name + '.mp4')
-        
+        frames_dir = os.path.join(output_path, 'frames')
         if not os.path.exists(output_path):
             os.makedirs(output_path)
             
+        os.makedirs(frames_dir)
         ## leave inputs (src_path, drv_path) as inputs.txt
         with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
             f.writelines([src_path, drv_path])
@@ -104,7 +105,7 @@ class THPipeline():
         args_run.result_dir = output_path
         args_run.result_video = 'mute.mp4'
         args_run.fps = self.config.config.common.attr.fps
-        export.test_model(args_run, self.generator, self.exp_transformer, self.kp_extractor, self.he_estimator, self.gpus, use_transformer=use_transformer, extract_driving_code=extract_driving_code)
+        export.test_model(args_run, self.generator, self.exp_transformer, self.kp_extractor, self.he_estimator, self.gpus, use_transformer=use_transformer, extract_driving_code=extract_driving_code, stage=stage, relative_headpose=relative_headpose, save_frames=save_frames)
 
         ## 4. Post Process
         # add audio

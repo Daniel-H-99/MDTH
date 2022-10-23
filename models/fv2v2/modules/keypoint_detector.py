@@ -1,3 +1,4 @@
+from numpy import place
 from torch import embedding_renorm_, nn
 import torch
 import torch.nn.functional as F
@@ -245,18 +246,24 @@ class ExpTransformer(nn.Module):
         init.constant_(self.delta_heads_post_scale, 0)
         # latent_dim = 2048
         
-    def encode(self, x):
-        id_embedding = self.id_encoder(x['mesh'])
-        id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
-
-        mesh_flattened = x['mesh'].flatten(1)
-        style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
-        exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
-        
-        delta_style_code = style_from_mesh
-        delta_exp_code = F.tanh(torch.exp(self.delta_heads_pre_scale / 10).unsqueeze(0).squeeze(2) * exp_from_mesh)
-        
-        return {'kp': kp, 'delta_style_code': delta_style_code , 'delta_exp_code': delta_exp_code}
+    def encode(self, x, placeholder=['kp', 'delta_code']):
+        output = {}
+        if 'kp' in placeholder:
+            id_embedding = self.id_encoder(x['mesh'])
+            id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
+            output['kp'] = id_embedding
+            
+        if 'delta_code' in placeholder:
+            mesh_flattened = x['mesh'].flatten(1)
+            style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
+            exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
+            
+            delta_style_code = style_from_mesh
+            delta_exp_code = F.tanh(torch.exp(self.delta_heads_pre_scale / 10).unsqueeze(0).squeeze(2) * exp_from_mesh)
+            output['delta_style_code'] = delta_style_code
+            output['delta_exp_code'] = delta_exp_code
+            
+        return output
 
     def decode(self, embedding):
         res = {}
@@ -273,15 +280,25 @@ class ExpTransformer(nn.Module):
     
         return res
 
-    def forward(self, src, drv):
-        src_embedding = self.encode(src)
-        drv_embedding = self.encode(drv)
+    def forward(self, src, drv, placeholder=['kp', 'delta_code']):
+        src_embedding = self.encode(src, placeholder=placeholder)
+        drv_embedding = self.encode(drv, placeholder=placeholder)
 
         src_output = self.decode(src_embedding)
         drv_output = self.decode(drv_embedding)
         # drv_output = self.decode({'kp': src_embedding['kp'], 'style': src_embedding['style'], 'exp': drv_embedding['exp']})
 
-        return {'src_embedding': src_embedding, 'drv_embedding': drv_embedding, 'src_kp': src_output['kp'], 'drv_kp': drv_output['kp']}
+        output = {'src_embedding': src_embedding, 'drv_embedding': drv_embedding}
+        
+        if 'kp' in placeholder:
+            output['src_kp'] = src_output['kp']
+            output['drv_kp'] = drv_output['kp']
+                  
+        if 'delta_code' in placeholder:
+            output['src_delta'] = src_output['delta']
+            output['drv_delta'] = drv_output['delta']
+            
+        return  output
 
 class HEEstimator(nn.Module):
     """

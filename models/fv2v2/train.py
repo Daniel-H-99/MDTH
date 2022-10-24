@@ -33,9 +33,13 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     # optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
     # optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
 
-    if checkpoint_ref is not None:
-        Logger.load_cpk(checkpoint_ref, generator=generator)
 
+    if checkpoint_ref is not None:
+        if 'generator' in checkpoint_ref:
+            Logger.load_cpk(checkpoint_ref['generator'], generator=generator)
+        if 'he_estimator' in checkpoint_ref:
+            Logger.load_cpk(checkpoint_ref['he_estimator'], he_estimator=he_estimator)
+            
     if checkpoint is not None:
         # start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator)
         # start_epoch = 0

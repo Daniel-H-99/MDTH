@@ -1538,8 +1538,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
-            # he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            # he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            src_feat = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            drv_feat = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
@@ -1547,16 +1547,11 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
-            tf_output = self.exp_transformer({'img': x['source'], 'mesh': source_mesh['value']}, {'img': x['driving'], 'mesh': driving_mesh['value']})
+            tf_output = self.exp_transformer({'feat': src_feat, 'mesh': source_mesh['value']}, {'feat': drv_feat, 'mesh': driving_mesh['value']})
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
 
-            src_exp = 0
-            drv_exp = 0
-            
-            source_mesh['exp'] = src_exp
-            driving_mesh['exp'] = drv_exp
 
             kp_canonical = {'value': tf_output['src_kp']}
             kp_canonical_drv = {'value': tf_output['drv_kp']}
@@ -1565,10 +1560,10 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             delta_drv_embedding = {'delta_style_code': tf_output['src_embedding']['delta_style_code'], 'delta_exp_code': tf_output['drv_embedding']['delta_exp_code']}
             # {'value': value, 'jacobian': jacobian}
             
-            delta_src = self.exp_transformer.decode(delta_src_embedding)['delta']
-            delta_drv = self.exp_transformer.decode(delta_drv_embedding)['delta']
+            src_delta = self.exp_transformer.decode(delta_src_embedding)['delta']
+            drv_delta = self.exp_transformer.decode(delta_drv_embedding)['delta']
             
-            driving_mesh['exp'] = source_mesh['exp'] - delta_src + delta_drv
+            driving_mesh['delta'] = -src_delta + drv_delta
             
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
             kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
@@ -1631,8 +1626,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 delta_style_code = tf_output['src_embedding']['delta_style_code']
                 delta_exp_code = tf_output['src_embedding']['delta_exp_code']
                 delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
-                delta_src_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
-                source_mesh_cycled = {'U': driving_mesh['U'], 'scale': driving_mesh['scale'], 'exp': source_mesh['exp'] - delta_src + delta_src_cycled}
+                src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
+                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': - src_delta + src_delta_cycled}
 
                 kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 

@@ -233,30 +233,30 @@ class ExpTransformer(nn.Module):
 
 
 
-        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=2)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
         self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=3)
+        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=2)
         
         init.constant_(self.delta_heads_pre_scale, 0)
         init.constant_(self.delta_heads_post_scale, 0)
         # latent_dim = 2048
         
-    def encode(self, x, placeholder=['kp', 'delta_code']):
+    def encode(self, x, placeholder=['kp', 'delta']):
         output = {}
         if 'kp' in placeholder:
             id_embedding = self.id_encoder(x['mesh'])
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
             output['kp'] = id_embedding
             
-        if 'delta_code' in placeholder:
+        if 'delta' in placeholder:
             mesh_flattened = x['mesh'].flatten(1)
             style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
-            exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
+            exp_from_mesh = self.delta_exp_extractor_from_mesh(x['feat'])
             
             delta_style_code = style_from_mesh
             delta_exp_code = F.tanh(torch.exp(self.delta_heads_pre_scale / 10).unsqueeze(0).squeeze(2) * exp_from_mesh)
@@ -280,7 +280,7 @@ class ExpTransformer(nn.Module):
     
         return res
 
-    def forward(self, src, drv, placeholder=['kp', 'delta_code']):
+    def forward(self, src, drv, placeholder=['kp', 'delta']):
         src_embedding = self.encode(src, placeholder=placeholder)
         drv_embedding = self.encode(drv, placeholder=placeholder)
 
@@ -294,7 +294,7 @@ class ExpTransformer(nn.Module):
             output['src_kp'] = src_output['kp']
             output['drv_kp'] = drv_output['kp']
                   
-        if 'delta_code' in placeholder:
+        if 'delta' in placeholder:
             output['src_delta'] = src_output['delta']
             output['drv_delta'] = drv_output['delta']
             

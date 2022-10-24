@@ -1538,8 +1538,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
-            src_feat = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            drv_feat = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            src_feat = self.he_estimator(x['source'])['out']        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            drv_feat = self.he_estimator(x['driving'])['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
@@ -1548,10 +1548,6 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             # driving_mesh['U'] = np.source_mesh['U']
             
             tf_output = self.exp_transformer({'feat': src_feat, 'mesh': source_mesh['value']}, {'feat': drv_feat, 'mesh': driving_mesh['value']})
-
-            src_exp = tf_output['src_exp']
-            drv_exp = tf_output['drv_exp']
-
 
             kp_canonical = {'value': tf_output['src_kp']}
             kp_canonical_drv = {'value': tf_output['drv_kp']}

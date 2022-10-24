@@ -18,11 +18,11 @@ config:
                 model: '@checkpoint_path/MDTH/img_mesh_logloss 11_10_22_09.07.39/00000079-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_fc_c64_nolog/mesh_fc_nolog.yaml'      
             generator:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage1 22_10_22_17.54.57/00000219-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage1 22_10_22_17.54.57/mesh_fc_stage1.yaml'      
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2/00000104-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_stage2/mesh_img_fc_stage2.yaml'      
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage1 22_10_22_17.54.57/00000219-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage1 22_10_22_17.54.57/mesh_fc_stage1.yaml'                  
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2/00000104-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_stage2/mesh_img_fc_stage2.yaml'                 
         attr:
             fps: 25
     preprocess:
@@ -57,12 +57,12 @@ dynamic:
     inputs:
         source: 'inputs/source.txt'
         driving: 'inputs/driving.txt'
-    label: 'mesh_fc_stage1_219_driving_fix_pose'
-    rewrite: True
+    label: 'mesh_img_fc_stage2_104_combi'
+    rewrite: False
     use_transformer: True
     extract_driving_code: True
     relative_headpose: True
-    stage: 1
+    stage: 2
     save_frames: False
     
     

@@ -35,7 +35,8 @@ if __name__ == "__main__":
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
     # parser.add_argument("--checkpoint_ref", default='/home/server19/minyeong_workspace/MDTH/models/fv2v2/log/img_mesh_logloss 11_10_22_09.07.39/last.tar', help="path to checkpoint to restore")
-    parser.add_argument("--checkpoint_ref", default=None, help="path to checkpoint to restore")
+    parser.add_argument("--checkpoint_ref_gen", default=None, help="path to checkpoint to restore")
+    parser.add_argument("--checkpoint_ref_he", default=None, help="path to checkpoint to restore")
     
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
                         help="Names of the devices comma separated.")
@@ -85,11 +86,11 @@ if __name__ == "__main__":
     # if opt.verbose:
     #     print(kp_detector)
 
-    # he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
-    #                            **config['model_params']['common_params'])
+    he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
+                               **config['model_params']['common_params'])
 
-    # if torch.cuda.is_available():
-    #     he_estimator.to(opt.device_ids[0])
+    if torch.cuda.is_available():
+        he_estimator.to(opt.device_ids[0])
 
 
     exp_transformer = ExpTransformer(**config['model_params']['exp_transformer_params'],
@@ -105,6 +106,13 @@ if __name__ == "__main__":
     if not os.path.exists(os.path.join(log_dir, os.path.basename(opt.config))):
         copy(opt.config, log_dir)
 
+    ckpt_ref = {}
+    if opt.checkpoint_ref_gen is not None:
+        ckpt_ref['generator'] = opt.checkpoint_ref_gen
+    if opt.checkpoint_ref_he is not None:
+        ckpt_ref['he_estimator'] = opt.checkpoint_ref_he
+        
+        
     if opt.mode == 'train':
         print(f"Training with stage {opt.stage}...")
-        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, None, None, opt.checkpoint, opt.checkpoint_ref, log_dir, dataset, opt.device_ids)
+        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, None, he_estimator, opt.checkpoint, ckpt_ref, log_dir, dataset, opt.device_ids)

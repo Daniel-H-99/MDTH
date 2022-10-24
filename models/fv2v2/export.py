@@ -383,7 +383,8 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
         trans_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
         
-        final_U = rot_src.T @  source_mesh['proj'].T @ trans_src.T
+        # final_U = source_mesh['view'].T @ source_mesh['proj'].T @ source_mesh['viewport'].T
+        final_U = rot_src.T @ source_mesh['proj'].T @ trans_src.T
         mesh['U'] = torch.tensor(final_U).float()
 
 def get_mesh_image_section(mesh, frame_shape, section_indices, sections_indices_splitted):
@@ -488,7 +489,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
         kp_source = preprocess_dict([source_mesh] * bs, device=device)
         
         # kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
-        he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+        src_feat = he_estimator(source)['out']        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
 
         _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
@@ -500,9 +501,12 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
+                src_feat = he_estimator(source)['out']        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
-            tf_output = exp_transformer({'img': source, 'mesh': _source_mesh['value']}, {'img': driving_frame, 'mesh': _driving_mesh['value']}, placeholder=['kp'] if stage ==1 else ['kp', 'delta'])
+            drv_feat = he_estimator(driving_frame)['out']
             
+            tf_output = exp_transformer(src_feat, drv_feat, placeholder=['kp', 'delta'])
+
             src_embedding = tf_output['src_embedding']
             drv_embedding = tf_output['drv_embedding']
             
@@ -510,17 +514,12 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             kp_canonical_drv = {'value': tf_output['drv_kp']}
 
             if stage==2:
-                src_delta = tf_output['src_delta']
-                drv_delta = tf_output['drv_delta']
-                
-                _source_mesh['delta'] = src_delta
-                _driving_mesh['delta'] = drv_delta
             
                 delta_source_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': src_embedding['delta_exp_code']}
                 delta_driving_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': drv_embedding['delta_exp_code']}
                 
-                delta_src = exp_transformer.module.decode(delta_source_embedding)['delta']
-                delta_drv = exp_transformer.module.decode(delta_driving_embedding)['delta']
+                src_delta = exp_transformer.module.decode(delta_source_embedding)['delta']
+                drv_delta = exp_transformer.module.decode(delta_driving_embedding)['delta']
                 
                 if extract_driving_code:
                     driving_codes.append(tf_output['drv_embedding']['delta_exp_code'].detach().cpu().numpy())
@@ -528,9 +527,12 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             
                 _driving_mesh['delta'] = - src_delta + drv_delta
             
-            # {'value': value, 'jacobian': jacobian}
-            kp_source = keypoint_transformation(kp_canonical, _source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical_drv, _driving_mesh)
+                # {'value': value, 'jacobian': jacobian}
+                kp_source = keypoint_transformation(kp_canonical, _source_mesh)
+                kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
+            else:
+                kp_source = keypoint_transformation(kp_canonical, _source_mesh)
+                kp_driving = keypoint_transformation(kp_canonical_drv, _driving_mesh)
             
             kp_norm = kp_driving
 
@@ -566,10 +568,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     reader = imageio.get_reader(os.path.join(opt.driving_dir, 'video.mp4'))
     opt.fps = reader.get_meta_data()['fps']
-    driving_video = []
+    driving_frames = []
     try:
         for im in reader:
-            driving_video.append(im)
+            driving_frames.append(im)
     except RuntimeError:
         pass
     reader.close()
@@ -584,7 +586,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     #     fids.append(fid)
     # order = torch.tensor(fids).argsort()
     # print(f'driving frame shape: {driving_frame')
-    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))
+    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_frames]))
     # print(f'driving_video shape: {driving_video.shape}')
     driving_video = driving_video.permute(0, 3, 1, 2).float()
 
@@ -759,7 +761,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     ref_nose = driving_landmarks_from_flame[0][27:36]
     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
-        driven_pose_index = 0
+        # driven_pose_index = 0
         mesh = {}
         ROI_IDX = ROI_EYE_IDX + list(range(48, 68))
         ROI_IDX = torch.tensor(ROI_IDX)
@@ -863,10 +865,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     for i, frame in enumerate(predictions):
         frame = np.ascontiguousarray(img_as_ubyte(frame))
-        if i >= len(target_meshes):
-            continue
-        mesh = target_meshes[i]
-        frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
+        # if i >= len(target_meshes):
+        #     continue
+        # mesh = target_meshes[i]
+        # frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
         meshed_frames.append(frame)
 
     predictions = meshed_frames

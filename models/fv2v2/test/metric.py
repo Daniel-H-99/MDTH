@@ -54,7 +54,7 @@ class MetricEvaluater():
         self.config = config
         self.dataset = DATASET
         self.dataloader = DataLoader
-        self.landmark_model = LandmarkModel(config.landmarkmodel_path) if landmark_model is None else landmark_model
+        self.landmark_model = LandmarkModel(config.config.common.checkpoints.landmark_model.dir) if landmark_model is None else landmark_model
         
     def get_dataloader(self, path, **kwargs):
         dataset = self.dataset(path)

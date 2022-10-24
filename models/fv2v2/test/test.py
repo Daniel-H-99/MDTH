@@ -4,9 +4,13 @@ import sys
 import os
 import argparse
 import shutil
+
+from requests import session
 from pipelines.th import THPipeline
 import yaml
 import datetime
+from metric import MetricEvaluater
+import numpy as np
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
@@ -52,12 +56,35 @@ def setup_exp(args, config):
 	shutil.copy(args.config, os.path.join(cwd, 'config.yaml'))
 	os.makedirs(os.path.join(cwd, 'inputs'))
 	test_samples = construct_test_samples(config, cwd=cwd)
+	materials['root_dir'] = cwd
 	materials['config'] = config
 	materials['pipeline'] = pipeline
 	materials['test_samples'] = test_samples
+	materials['metric'] = MetricEvaluater(config)
 	materials = AttrDict.from_nested_dicts(materials)
 	
 	return materials
+
+def eval_iter_sessions(func, session_dirs, post_fix=''):
+	scores = []
+	for session in session_dirs:
+		inputs = np.loadtxt(os.path.join(session, 'inputs.txt'))
+		source, driving = inputs
+		result_path = os.path.join(session, post_fix) if len(post_fix) > 0 else session
+		GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
+  
+		score_session = func(result_path, GT_path)
+		scores['session'] = score_session
+	
+	return scores
+
+def eval_exp(materials, session_names):
+	metric = materials.metric
+	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x, session_dirs)))
+	
+	
+ 
+	
 
 def run_session(config, src, drv, pipeline, label):
     ### preprocess
@@ -65,13 +92,21 @@ def run_session(config, src, drv, pipeline, label):
 	pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
     
 	### inference
-	pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer, extract_driving_code=config.dynamic.extract_driving_code, stage=config.dynamic.stage, relative_headpose=config.dynamic.relative_headpose, save_frames=config.dynamic.save_frames)
- 
+	session_dir = pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer, extract_driving_code=config.dynamic.extract_driving_code, stage=config.dynamic.stage, relative_headpose=config.dynamic.relative_headpose, save_frames=config.dynamic.save_frames)
+	return session_dir
+
+
 def run_exp(materials):
+	session_dirs = []
 	for src, drv in materials.test_samples:
 		print(f'running session: {(src, drv)}')
-		run_session(materials.config, src, drv, materials.pipeline, materials.label)
-  
+		session_dir = run_session(materials.config, src, drv, materials.pipeline, materials.label)
+		session_dirs.append(session_dir)
+	
+	### evaluation
+	metric = materials.metric
+	
+	
 
 def construct_test_samples(config, cwd=None):
 	samples = []

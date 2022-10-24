@@ -72,11 +72,11 @@ class Logger:
         
         if exp_transformer is not None:
             _state = exp_transformer.state_dict()
-            # for k, v in checkpoint['exp_transformer'].items():
-            #     if 'exp_encoder' in k or 'id_encoder' in k or 'kp_decoder' in k:
-            #         _state[k] = v
+            for k, v in checkpoint['exp_transformer'].items():
+                if 'delta' not in k:
+                    _state[k] = v
             # _state = checkpoint['exp_transformer']
-            _state.update(checkpoint['exp_transformer'])
+            # _state.update(checkpoint['exp_transformer'])
             exp_transformer.load_state_dict(_state)
         if hie_estimator is not None:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])
@@ -223,9 +223,9 @@ class Visualizer:
         
         if 'kp_driving_cycled' in out:
             # cycled source image (must be same be normal one)
-            cycled_driving = np.concatenate([driving[1:], driving[[0]]], axis=0)
-            cycled_kp_driving = np.concatenate([kp_driving[1:], kp_driving[[0]]], axis=0)
-            images.append((cycled_driving, cycled_kp_driving))
+            cycled_source = np.concatenate([source[1:], source[[0]]], axis=0)
+            cycled_kp_source = np.concatenate([kp_source[1:], kp_source[[0]]], axis=0)
+            images.append((cycled_source, cycled_kp_source))
             
             # cycyled driven image
             kp_driving = out['kp_driving_cycled']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d

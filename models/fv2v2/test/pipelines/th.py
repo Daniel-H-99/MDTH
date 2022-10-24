@@ -113,7 +113,7 @@ class THPipeline():
 
         os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -i {os.path.join(drv_path, 'video.mp4')} -map 0:v:0 -map 1:a:0 -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
         
-            
+        return output_name
         
         # ## 0. Setup Directories
         # tmp_dir = self.config.TH.preprocess.output.save_path

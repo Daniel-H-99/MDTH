@@ -1284,6 +1284,19 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             for p in generator.parameters():
                 p.requires_grad = False
             
+        if self.stage == 3:
+            for name, p in self.exp_transformer.named_parameters():
+                if 'delta' not in name or 'delta_exp_extractor_from_mesh' in name or 'delta_heads_pre_scale' in name:
+                    p.requires_grad = False
+                else:
+                    p.requires_grad = True
+
+            self.exp_transformer.train()
+
+            generator.eval()
+            for p in generator.parameters():
+                p.requires_grad = False
+                
         #     self.id_classifier_scale = train_params['id_classifier_scale']
         #     self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
         #     self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])

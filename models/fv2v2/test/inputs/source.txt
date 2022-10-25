@@ -21,4 +21,3 @@ voxceleb_img/00006.jpg
 voxceleb_img/0000022.png
 voxceleb_img/0000030.png
 voxceleb_img/0000072.png
-

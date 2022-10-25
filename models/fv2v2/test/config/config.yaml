@@ -18,11 +18,11 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/00000069-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'        
+                model: '@checkpoint_path/MDTH/mesh_img_fc_nonoise_stage2/00000149-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nonoise_stage2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/00000069-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'                 
+                model: '@checkpoint_path/MDTH/mesh_img_fc_nonoise_stage2/00000149-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nonoise_stage2/mesh_img_fc_stage2.yaml'                  
         attr:
             fps: 25
     preprocess:
@@ -56,8 +56,8 @@ dynamic:
     input_as_file: True
     inputs:
         source: 'inputs/source.txt'
-        driving: 'inputs/driving.txt'
-    label: 'mesh_img_fc_nolog_stage2_069_combi'
+        driving: 'inputs/driving_tmp.txt'
+    label: 'mesh_img_fc_nonoise_stage2_149_combi'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

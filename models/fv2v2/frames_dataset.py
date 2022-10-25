@@ -147,7 +147,7 @@ class FramesDataset3(Dataset):
         H, W = image.shape[:2]
         bb, lm = self.landmark_model.get_landmarks_fa(image)
         # lm[:, 1] = H - lm[:, 1]
-        lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W)
+        lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W, t_noise=0.05*H)
         # U = torch.from_numpy(U['U'])
         normalizer = U['normalizer']
         U = U['U']

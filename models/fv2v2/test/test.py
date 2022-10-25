@@ -15,7 +15,7 @@ import csv
 
 
 class MetricItem():
-    def ___init__(self, name, attr, post_fix=''):
+    def __init__(self, name, attr, post_fix=''):
         self.name = name
         self.attr = attr
         self.post_fix=post_fix
@@ -135,13 +135,7 @@ def eval_exp(materials, session_names):
 		meta_info = METRIC_META[metric_name]
 		metric_score = eval_iter_sessions(meta_info['func'], materials, session_names, post_fix=meta_info['post_fix'])
 		scores[metric_name] = metric_score
-  
-	
-	
-	
-	
- 
-	
+
 
 def run_session(config, src, drv, pipeline, label):
     ### preprocess

@@ -1544,7 +1544,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 value = torch.norm(driving_mesh['exp'], p=1, dim=-1).mean()
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
-        elif self.stage == 2:
+        elif self.stage == 2 or self.stage == 3:
             loss_values = {}
             
             bs = len(x['source'])

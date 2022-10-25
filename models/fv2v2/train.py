@@ -160,7 +160,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 # 'optimizer_kp_detector': optimizer_kp_detector,
                 # 'optimizer_he_estimator': optimizer_he_estimator, 
                 'optimizer_discriminator': optimizer_discriminator}, inp=x, out=generated)
-            elif stage == 2:
+            elif stage == 2 or stage == 3:
                 logger.log_epoch(epoch, {'exp_transformer': exp_transformer, 
                 'generator': generator,
                 'discriminator': discriminator,

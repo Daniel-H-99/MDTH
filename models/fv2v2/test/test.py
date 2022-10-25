@@ -12,6 +12,7 @@ import datetime
 from metric import MetricEvaluater
 import numpy as np
 import csv
+import torch
 
 class MetricItem():
     def ___init__(self, name, attr, post_fix=''):
@@ -89,8 +90,9 @@ def eval_iter_sessions(func, materials, session_names, post_fix=''):
 	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x, session_dirs)))
 
 	for session_name, session_dir in zip(session_names, session_dirs):
-		inputs = np.loadtxt(os.path.join(session_name, 'inputs.txt'))
-		source, driving = inputs
+		with open(os.path.join(session_name, 'inputs.txt'), 'r') as f:
+			source, driving = f.readlines()
+   
 		result_path = os.path.join(session_name, post_fix) if len(post_fix) > 0 else session_name
 		GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
   
@@ -132,9 +134,12 @@ def eval_exp(materials, session_names):
 	### same identity evaluation
 	for metric_name in materials.metric_names.same_identity:
 		meta_info = METRIC_META[metric_name]
-		metric_score = eval_iter_sessions(meta_info['func'], materials, session_names, post_fix=meta_info['post_fix'])
+		metric_score = eval_iter_sessions(getattr(metric, meta_info.func), materials, session_names, post_fix=meta_info.post_fix)
 		scores[metric_name] = metric_score
   
+	write_scores(scores, materials)
+ 
+	return scores
 	
 	
 	
@@ -162,7 +167,11 @@ def run_exp(materials):
 	### evaluation
 	# eval_exp(materials, session_names)
 	
-	
+	# materials.result.session_names = session_names
+ 
+	# delattr(materials, 'metric')
+ 
+	# torch.save(materials, os.path.join(materials.cwd, 'materials.pt'))
 
 def construct_test_samples(config, cwd=None):
 	samples = []

@@ -144,7 +144,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 logger.log_iter(losses=losses)
 
             scheduler.step()
-            if stage == 1:
+            if stage == 1 or stage == 3:
                 scheduler_generator.step()
             scheduler_discriminator.step()
             # scheduler_kp_detector.step()

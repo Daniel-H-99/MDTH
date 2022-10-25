@@ -1293,9 +1293,9 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
             self.exp_transformer.train()
 
-            generator.eval()
-            for p in generator.parameters():
-                p.requires_grad = False
+            # generator.eval()
+            # for p in generator.parameters():
+            #     p.requires_grad = False
                 
         #     self.id_classifier_scale = train_params['id_classifier_scale']
         #     self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])

@@ -21,13 +21,21 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     if stage == 1:
         optimizer = torch.optim.Adam(exp_transformer.parameters(), lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
         optimizer_generator = torch.optim.Adam(generator.parameters(), lr=train_params['lr_generator'], betas=(0.5, 0.999))
-    else: 
+    elif stage == 2: 
         delta_params = []
         for name, p in exp_transformer.named_parameters():
             if 'delta' in name:
                 delta_params.append(p)
         optimizer = torch.optim.Adam(delta_params, lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
         optimizer_generator = None
+    elif stage == 3:
+        delta_params = []
+        for name, p in exp_transformer.named_parameters():
+            if 'delta' not in name or 'delta_exp_extractor_from_mesh' in name or 'delta_heads_pre_scale' in name:
+                delta_params.append(p)
+        optimizer = torch.optim.Adam(delta_params, lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
+        optimizer_generator = torch.optim.Adam(generator.parameters(), lr=train_params['lr_generator'], betas=(0.5, 0.999))
+
     
     optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
     # optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
@@ -51,7 +59,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     # print(f'start epoch: {start_epoch}')
     scheduler = MultiStepLR(optimizer, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
-    if stage == 1:
+    if stage == 1 or stage == 3:
         scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
 
@@ -112,7 +120,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-                if stage == 1:
+                if stage == 1 or stage == 3:
                     optimizer_generator.step()
                     optimizer_generator.zero_grad()
                 # optimizer_kp_detector.step()

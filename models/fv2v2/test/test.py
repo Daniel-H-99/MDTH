@@ -13,6 +13,24 @@ from metric import MetricEvaluater
 import numpy as np
 import csv
 
+
+class MetricItem():
+    def ___init__(self, name, attr, post_fix=''):
+        self.name = name
+        self.attr = attr
+        self.post_fix=post_fix
+
+
+METRIC_META = {
+    'L1': MetricItem('L1', 'L1', 'frames'),
+    'FID': MetricItem('FID', 'FID', 'frames'),
+    'SSIM': MetricItem('SSIM', 'SSIM', 'frames'),
+    'LPIPS': MetricItem('LIPIPS', 'LPIPS', 'frames'),
+    'MS-SSIM': MetricItem('MS-SSIM', 'MS-SSIM', 'frames'),
+    'AKD': MetricItem('AKD', 'AKD', 'frames'),
+    'PSNR': MetricItem('PSNR', 'PSNR', 'frames'),
+}
+
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)

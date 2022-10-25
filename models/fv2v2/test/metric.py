@@ -99,8 +99,13 @@ class MetricEvaluater():
         
         return frame
     
-    def L1(self, x, y):
+    def L1(self, x, y, is_path=True):
         # x: generated, y: ground truth tensor of (B x channel x H x W)
+        if is_path:
+            pairs = self.get_paired_frames(x, y)
+            x = pairs[:, 0]
+            y = pairs[:, 1]
+
         return torch.abs((x - y)).mean()
     
     def FID(self, x, y, is_path=True):

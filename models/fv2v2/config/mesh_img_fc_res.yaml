@@ -74,7 +74,7 @@ train_params:
   lr_he_estimator: 2.0e-4
   lr_exp_transformer: 2.0e-4
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 4
+  batch_size: 12
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'

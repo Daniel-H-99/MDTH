@@ -90,30 +90,6 @@ def setup_exp(args, config):
 	
 	return materials
 
-def eval_iter_sessions(func, materials, session_names, post_fix=''):
-	scores = {}
-	print(f'cwd: {materials.cwd}')
-	print(f'session names: {session_names}')
-	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x), session_names))
-
-	for session_name, session_dir in zip(session_names, session_dirs):
-		inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'), dtype=str)
-		print(f'inputs: {inputs}')
-		source, driving = inputs
-		# with open(os.path.join(session_dir, 'inputs.txt'), 'r') as f:
-		# 	inputs = f.readlines()
-
-		# 	print(f'inputs: {inputs}')
-   
-
-		result_path = os.path.join(session_dir, post_fix) if len(post_fix) > 0 else session_name
-		GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
-  
-		score_session = func(result_path, GT_path).detach().cpu().numpy()
-		scores[session_name] = score_session
-	
-	return scores
-
 def write_scores(scores, materials):
 	output_score_file = os.path.join(materials.cwd, 'metrics', 'scores.csv')
 	output_summary_file = os.path.join(materials.cwd, 'metrics', 'summary.txt')
@@ -142,6 +118,31 @@ def write_scores(scores, materials):
 	# with open(output_summary_file, 'w') as f:
 	# 	f.writelines(summary_string)
 
+
+def eval_iter_sessions(func, materials, session_names, post_fix=''):
+	scores = {}
+	print(f'cwd: {materials.cwd}')
+	print(f'session names: {session_names}')
+	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x), session_names))
+
+	for session_name, session_dir in zip(session_names, session_dirs):
+		inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'), dtype=str)
+		print(f'inputs: {inputs}')
+		source, driving = inputs
+		# with open(os.path.join(session_dir, 'inputs.txt'), 'r') as f:
+		# 	inputs = f.readlines()
+
+		# 	print(f'inputs: {inputs}')
+   
+
+		result_path = os.path.join(session_dir, post_fix) if len(post_fix) > 0 else session_name
+		GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
+  
+		score_session = func(result_path, GT_path).detach().cpu().numpy()
+		scores[session_name] = score_session
+	
+	return scores
+
 def eval_exp(materials, session_names):
 	metric = materials.metric
 	scores = {}
@@ -158,7 +159,7 @@ def eval_exp(materials, session_names):
 
 def run_session(config, src, drv, pipeline, label):
     ### preprocess
-	pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite)
+	pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite, is_video=config.dynamic.video_source)
 	pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
     
 	### inference
@@ -200,6 +201,7 @@ def construct_test_samples(config, cwd=None):
 				shutil.copy(input_file, os.path.join(cwd, 'inputs', input_key))
 	else:
 		inputs = config.dynamics.inputs
+  
 	if config.dynamic.mode == 'pair':
 		for line in inputs.pair:
 			print(f'line: {line}')

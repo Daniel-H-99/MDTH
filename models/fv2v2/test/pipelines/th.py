@@ -32,7 +32,8 @@ class THPipeline():
         self.he_estimator = export.load_he_estimator(self.config.config.common.checkpoints.he_estimator.config, self.config.config.common.checkpoints.he_estimator.model, self.gpus)
         self.landmark_model = export.load_landmark_model(self.config.config.common.checkpoints.landmark_model.dir, self.gpus)
         self.kp_extractor = None
-    def preprocess_image(self, img_name, rewrite=False):
+        
+    def preprocess_image(self, img_name, rewrite=False, video_source=False):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
         src_path = os.path.join(src_dir, img_name)

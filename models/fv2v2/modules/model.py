@@ -1632,7 +1632,12 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                     generated[f'{k}_cycled'] = v
                 generated['kp_driving_cycled'] = kp_source_cycled
                 
-
+            if self.loss_weights['guide'] != 0:
+                delta_GT = kp_canonical_drv['value'] - kp_canonical['value']
+                delta = driving_mesh['delta']
+                assert delta_GT.shape == delta.shape
+                loss_values['guide'] = self.loss_weights['guide'] * F.l1_loss(delta, delta_GT)
+                
             if self.loss_weights['log'] != 0:
                 src_exp_code = tf_output['src_embedding']['delta_exp_code']   # B x num_heads
                 drv_exp_code = tf_output['drv_embedding']['delta_exp_code']   # B x num_heads

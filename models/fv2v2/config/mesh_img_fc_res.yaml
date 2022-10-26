@@ -93,7 +93,7 @@ train_params:
     keypoint: 0
     headpose: 0
     motion_match: 0
-    log: 10
+    log: 0
     expression: 0
     localized: [0, 0, 0, 0, 0, 0, 0, 0, 0]
     style: 0

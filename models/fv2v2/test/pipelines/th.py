@@ -33,7 +33,7 @@ class THPipeline():
         self.landmark_model = export.load_landmark_model(self.config.config.common.checkpoints.landmark_model.dir, self.gpus)
         self.kp_extractor = None
         
-    def preprocess_image(self, img_name, rewrite=False, video_source=False):
+    def preprocess_image(self, img_name, rewrite=False):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
         src_path = os.path.join(src_dir, img_name)
@@ -115,7 +115,11 @@ class THPipeline():
         # add audio
         SIZE = 256
 
-        os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -i {os.path.join(drv_path, 'video.mp4')} -map 0:v:0 -map 1:a:0 -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
+        if os.path.exists(os.path.join(drv_path, 'video.mp4')):
+            os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -i {os.path.join(drv_path, 'video.mp4')} -map 0:v:0 -map 1:a:0 -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
+
+        else:
+            os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
         
         return output_name
         

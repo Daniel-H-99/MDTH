@@ -568,27 +568,27 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     # sections = config['train_params']['sections']
 
-    reader = imageio.get_reader(os.path.join(opt.driving_dir, 'video.mp4'))
-    opt.fps = reader.get_meta_data()['fps']
-    driving_video = []
-    try:
-        for im in reader:
-            driving_video.append(im)
-    except RuntimeError:
-        pass
-    reader.close()
-
-    # driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
+    # reader = imageio.get_reader(os.path.join(opt.driving_dir, 'video.mp4'))
+    # opt.fps = reader.get_meta_data()['fps']
     # driving_video = []
-    # fids = []
-    # for frame_path in driving_frames_path:
-    #     driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
-    #     driving_video.append(driving_frame)
-    #     fid = int(frame_path.split('.png')[0])
-    #     fids.append(fid)
-    # order = torch.tensor(fids).argsort()
+    # try:
+    #     for im in reader:
+    #         driving_video.append(im)
+    # except RuntimeError:
+    #     pass
+    # reader.close()
+
+    driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
+    driving_video = []
+    fids = []
+    for frame_path in driving_frames_path:
+        driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
+        driving_video.append(driving_frame)
+        fid = int(frame_path.split('.png')[0])
+        fids.append(fid)
+    order = torch.tensor(fids).argsort()
     # print(f'driving frame shape: {driving_frame')
-    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))
+    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))[order]
     # print(f'driving_video shape: {driving_video.shape}')
     driving_video = driving_video.permute(0, 3, 1, 2).float()
 
@@ -603,7 +603,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     frame_shape = config['dataset_params']['frame_shape']
 
-    source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
+    if opt.source_dir.endswith('.mp4'):
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '00000.png'))
+    else:
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
     if len(source_image.shape) == 2:
         source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)

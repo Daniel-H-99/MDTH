@@ -14,6 +14,7 @@ import numpy as np
 import csv
 import torch
 import types
+import glob
 
 class MetricItem():
     def __init__(self, name, func, post_fix=''):
@@ -159,9 +160,13 @@ def eval_exp(materials, session_names):
 
 def run_session(config, src, drv, pipeline, label):
     ### preprocess
-	pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite, is_video=config.dynamic.video_source)
-	pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
-    
+	if not config.dynamic.processed_inputs:
+		if src.endswith('.mp4'):
+			pipeline.preprocess_video(src, rewrite=config.dynamic.rewrite)
+		else:
+			pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite)
+		pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
+		
 	### inference
 	session_dir = pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer, extract_driving_code=config.dynamic.extract_driving_code, stage=config.dynamic.stage, relative_headpose=config.dynamic.relative_headpose, save_frames=config.dynamic.save_frames)
 	return session_dir
@@ -189,6 +194,8 @@ def run_exp(materials):
 def construct_test_samples(config, cwd=None):
 	samples = []
 	inputs = config.dynamic.inputs
+	data_dir = config.env.proc_path if config.dynamic.processed_inputs else config.env.raw_path
+
 	if config.dynamic.input_as_file:
 		for input_key, input_file in list(vars(inputs).items()):
 			items = []
@@ -196,6 +203,7 @@ def construct_test_samples(config, cwd=None):
 				lines = f.readlines()
 				for line in lines:
 					items.append(line.strip())
+     
 			setattr(inputs, input_key, items)
 			if cwd is not None:
 				shutil.copy(input_file, os.path.join(cwd, 'inputs', input_key))
@@ -206,7 +214,26 @@ def construct_test_samples(config, cwd=None):
 		for line in inputs.pair:
 			print(f'line: {line}')
 			src, drv = line.split(',')
-			samples.append((src, drv))
+			print(f'src, drv: {src} , {drv}')
+			if '*' in src:
+				print(f'globing src...')
+				print(f'data dir: {data_dir}')
+				print(f'globing: {os.path.join(data_dir, src)}')
+    
+				src = glob.glob(os.path.join(data_dir, src))
+    
+				src = list(map(lambda x: os.path.relpath(x, start=data_dir), src))
+				print(f'globed src: {src}')
+			if '*' in drv:
+				drv = glob.glob(os.path.join(data_dir, drv))
+				drv = list(map(lambda x: os.path.relpath(x, start=data_dir), drv))
+			assert (type(src) == list) * (type(drv) == list), 'src, drv pairs are not matched!'
+			if type(src) == list:
+				for src_item, drv_item in zip(src, drv):
+					samples.append((src_item, drv_item))
+			else:
+				samples.append((src, drv))
+    
 	elif config.dynamic.mode == 'combination':
 		for source_line in inputs.source:
 			src = source_line

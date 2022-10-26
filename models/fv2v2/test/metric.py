@@ -64,7 +64,10 @@ class MetricEvaluater():
         # x, y: image directory
         files_x = os.listdir(x)
         files_y = os.listdir(y)
-
+        print(f'files_x: {files_x}')
+        print(f'files_y: {files_y}')
+        # while True:
+        #     continue
         pairs = []
         for file in files_x:
             if file in files_y:
@@ -73,8 +76,8 @@ class MetricEvaluater():
                 frame_x = img_as_float32(imread(path_x))
                 frame_y = img_as_float32(imread(path_y))
                 pairs.append([frame_x, frame_y])
-        
-        pairs = torch.tensor(np.array(pairs)).permute(0, 3, 1, 2)
+                
+        pairs = torch.tensor(np.array(pairs)).permute(0, 1, 4, 2, 3)
         
         return pairs
     

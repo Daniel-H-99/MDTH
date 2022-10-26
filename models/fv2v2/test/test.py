@@ -12,12 +12,13 @@ import datetime
 from metric import MetricEvaluater
 import numpy as np
 import csv
-
+import torch
+import types
 
 class MetricItem():
-    def __init__(self, name, attr, post_fix=''):
+    def __init__(self, name, func, post_fix=''):
         self.name = name
-        self.attr = attr
+        self.func = func
         self.post_fix=post_fix
 
 
@@ -76,23 +77,36 @@ def setup_exp(args, config):
 	os.makedirs(os.path.join(cwd, 'inputs'))
 	os.makedirs(os.path.join(cwd, 'metrics'))
 	test_samples = construct_test_samples(config, cwd=cwd)
-	materials['root_dir'] = cwd
+	materials['cwd'] = cwd
 	materials['config'] = config
 	materials['pipeline'] = pipeline
 	materials['test_samples'] = test_samples
 	materials['metric'] = MetricEvaluater(config)
+	materials['metric_names'] = {
+     'same_identity': ['L1']
+	}
+	
 	materials = AttrDict.from_nested_dicts(materials)
 	
 	return materials
 
 def eval_iter_sessions(func, materials, session_names, post_fix=''):
 	scores = {}
-	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x, session_dirs)))
+	print(f'cwd: {materials.cwd}')
+	print(f'session names: {session_names}')
+	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x), session_names))
 
 	for session_name, session_dir in zip(session_names, session_dirs):
-		inputs = np.loadtxt(os.path.join(session_name, 'inputs.txt'))
+		inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'), dtype=str)
+		print(f'inputs: {inputs}')
 		source, driving = inputs
-		result_path = os.path.join(session_name, post_fix) if len(post_fix) > 0 else session_name
+		# with open(os.path.join(session_dir, 'inputs.txt'), 'r') as f:
+		# 	inputs = f.readlines()
+
+		# 	print(f'inputs: {inputs}')
+   
+
+		result_path = os.path.join(session_dir, post_fix) if len(post_fix) > 0 else session_name
 		GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
   
 		score_session = func(result_path, GT_path)
@@ -103,28 +117,30 @@ def eval_iter_sessions(func, materials, session_names, post_fix=''):
 def write_scores(scores, materials):
 	output_score_file = os.path.join(materials.cwd, 'metrics', 'scores.csv')
 	output_summary_file = os.path.join(materials.cwd, 'metrics', 'summary.txt')
-	metric_names = scores.keys()
+	metric_names = list(scores.keys())
 	fields = ['vid'] + metric_names
-	vids = scores.values()[0].keys()
+	vids = list(list(scores.values())[0].keys())
  
 	### raw data
-	with open(output_score_file, "wb") as f:
+	with open(output_score_file, "w") as f:
 		w = csv.DictWriter(f, fields)
+		print(f'fileds: {fields}')
 		w.writeheader()
 		for vid in vids:	
-			w.writerow({field: scores.get(field)[vid] or vid for field in fields})
+			w.writerow({field: scores.get(field)[vid] if field in scores else vid for field in fields})
    
 	### summary
 	s = []
 	for metric_name in metric_names:
-		metric_scores = np.array(scores[metric_name].values())
+		metric_scores = np.array(list(scores[metric_name].values()))
 		mean, std = metric_scores.mean(), metric_scores.std()
 		s.append(f'{metric_name}: {mean}-{std}')
 	
-	summary_string = '\n'.join(s)
+	np.savetxt(output_summary_file, s, fmt='%s')
+	# summary_string = '\n'.join(s)
 	
-	with open(output_summary_file, 'w') as f:
-		f.writelines(summary_string)
+	# with open(output_summary_file, 'w') as f:
+	# 	f.writelines(summary_string)
 
 def eval_exp(materials, session_names):
 	metric = materials.metric
@@ -133,9 +149,12 @@ def eval_exp(materials, session_names):
 	### same identity evaluation
 	for metric_name in materials.metric_names.same_identity:
 		meta_info = METRIC_META[metric_name]
-		metric_score = eval_iter_sessions(meta_info['func'], materials, session_names, post_fix=meta_info['post_fix'])
+		metric_score = eval_iter_sessions(getattr(metric, meta_info.func), materials, session_names, post_fix=meta_info.post_fix)
 		scores[metric_name] = metric_score
-
+  
+	write_scores(scores, materials)
+ 
+	return scores
 
 def run_session(config, src, drv, pipeline, label):
     ### preprocess
@@ -155,9 +174,16 @@ def run_exp(materials):
 		session_names.append(session_name)
 	
 	### evaluation
-	# eval_exp(materials, session_names)
+	eval_exp(materials, session_names)
 	
-	
+	setattr(materials, 'result', types.SimpleNamespace())
+	materials.result.session_names = session_names
+	# setattr(materials.result, 'session_names', session_names)
+
+	del materials.metric
+	del materials.pipeline
+
+	torch.save(materials, os.path.join(materials.cwd, 'materials.pt'))
 
 def construct_test_samples(config, cwd=None):
 	samples = []

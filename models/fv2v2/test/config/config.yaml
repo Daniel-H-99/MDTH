@@ -55,7 +55,7 @@ dynamic:
     mode: 'combination'
     input_as_file: True
     inputs:
-        source: 'inputs/source.txt'
+        source: 'inputs/source_tmp.txt'
         driving: 'inputs/driving_tmp.txt'
     label: 'mesh_img_fc_stage2_169_combi'
     rewrite: False
@@ -63,7 +63,7 @@ dynamic:
     extract_driving_code: True
     relative_headpose: True
     stage: 2
-    save_frames: False
+    save_frames: True
     
     
 

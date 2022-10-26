@@ -170,7 +170,7 @@ class LandmarkModel():
 
             break
 
-    def preprocess_video(self, inp, output, image_shape=(256, 256), increase=0.2, iou_with_initial=0.25, min_frames=1):
+    def preprocess_video(self, inp, output, image_shape=(256, 256), increase=0.1, iou_with_initial=0.25, min_frames=1):
         if os.path.exists(output):
             return output
         

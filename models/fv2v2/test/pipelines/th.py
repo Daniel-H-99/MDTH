@@ -6,6 +6,7 @@ import torch
 import pathlib
 import shutil
 import imageio
+import numpy as np
 
 root_dir = str(pathlib.Path(__file__).parent / '..' / '..')
 sys.path.insert(0, root_dir)
@@ -95,8 +96,10 @@ class THPipeline():
             
         os.makedirs(frames_dir)
         ## leave inputs (src_path, drv_path) as inputs.txt
-        with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
-            f.writelines([src_path, drv_path])
+        inputs = [src_path, drv_path]
+        np.savetxt(os.path.join(output_path, 'inputs.txt'), inputs, fmt='%s')
+        # with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
+        #     f.writelines([src_path+'\r\n', drv_path+'\r\n'])
             
         args_run = copy.copy(self.config.config.inference.attr)
         args_run.config = self.config.config.common.checkpoints.exp_transformer.config
@@ -113,7 +116,7 @@ class THPipeline():
 
         os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -i {os.path.join(drv_path, 'video.mp4')} -map 0:v:0 -map 1:a:0 -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
         
-            
+        return output_name
         
         # ## 0. Setup Directories
         # tmp_dir = self.config.TH.preprocess.output.save_path

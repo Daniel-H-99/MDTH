@@ -27,7 +27,7 @@ METRIC_META = {
     'FID': MetricItem('FID', 'FID', 'frames'),
     'SSIM': MetricItem('SSIM', 'SSIM', 'frames'),
     'LPIPS': MetricItem('LIPIPS', 'LPIPS', 'frames'),
-    'MS-SSIM': MetricItem('MS-SSIM', 'MS-SSIM', 'frames'),
+    'MS-SSIM': MetricItem('MS-SSIM', 'MS_SSIM', 'frames'),
     'AKD': MetricItem('AKD', 'AKD', 'frames'),
     'PSNR': MetricItem('PSNR', 'PSNR', 'frames'),
 }
@@ -83,9 +83,9 @@ def setup_exp(args, config):
 	materials['test_samples'] = test_samples
 	materials['metric'] = MetricEvaluater(config)
 	materials['metric_names'] = {
-     'same_identity': ['L1']
+     'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR']
 	}
-	
+
 	materials = AttrDict.from_nested_dicts(materials)
 	
 	return materials
@@ -109,7 +109,7 @@ def eval_iter_sessions(func, materials, session_names, post_fix=''):
 		result_path = os.path.join(session_dir, post_fix) if len(post_fix) > 0 else session_name
 		GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
   
-		score_session = func(result_path, GT_path)
+		score_session = func(result_path, GT_path).detach().cpu().numpy()
 		scores[session_name] = score_session
 	
 	return scores

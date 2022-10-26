@@ -275,6 +275,36 @@ class LandmarkModel():
         frame_landmarks = np.stack([frame_landmarks[:, 0].clip(0, H - 1), frame_landmarks[:, 1].clip(0, W - 1)], axis=1)
         return (bb, frame_landmarks)
 
+    def get_landmarks_batch(self, frames):
+        frames = np.array(frames)
+        frames = frames[:, :3]
+        H, W = frames.shape[2:4]
+        bb = (0, 0, H - 1, W - 1)
+        batch_landmarks = []
+        for i, frame in enumerate(frames):
+            frame = frame.transpose((1, 2, 0))
+            if max(H, W) > 640:
+                scale_factor =  max(H, W) / 640.0
+                frame = resize(frame, (int(H / scale_factor), int(W / scale_factor)))
+                frame = img_as_ubyte(frame)
+            else:
+                scale_factor = 1
+                frame = img_as_ubyte(frame)
+            # faces = self.detector([frame])
+            # f_boxes = [np.array(bb)[None]]
+            # print(f'faces: {faces}')
+            # frame_landmarks = self.predictor(f_boxes, [frame])
+            # print(f'frame_landmarks - type: {type(frame_landmarks)}')
+            # print(f'frame_landmarks - shape: {frame_landmarks.shape}')
+            # print(f'frame_landmarks - data: {frame_landmarks}')
+            frame_landmarks = self.fa.get_landmarks(frame)[0].astype(int) * scale_factor
+            # print(f'delta: {frame_landmarks[0][0].astype(int) - GT_frame_landmarks}')
+            frame_landmarks = np.stack([frame_landmarks[:, 0].clip(0, H - 1), frame_landmarks[:, 1].clip(0, W - 1)], axis=1)
+            batch_landmarks.append(frame_landmarks)
+        batch_landmarks = np.array(batch_landmarks)
+        
+        return batch_landmarks
+
     def normalize_mesh(self, landmarks, image_height, image_width, z_mean=None, R_noise=None, t_noise=None):
         eos_landmarks = []
         # print(f'landmarks: {landmarks}')

@@ -650,6 +650,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     driving_meshes = []
     
     driving_landmarks_from_flame = [driving_landmark['3d_landmarks'].float() for driving_landmark in driving_landmarks]
+    driving_Us = [torch.tensor(driving_landmark['p']['U']).float() for driving_landmark in driving_landmarks]
+    
     from_flame_bias = 0
 
     ### eye drive ###
@@ -814,6 +816,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             final_trans = driving_pose['t'][:3]
             mesh['t'] = final_trans
             mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj']
+        else:
+            mesh['U'] = driving_Us[i]
             
         mesh['scale'] = SCALE
         

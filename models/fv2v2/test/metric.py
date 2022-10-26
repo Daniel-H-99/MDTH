@@ -39,12 +39,12 @@ class DATASET(Dataset):
         self.frames = os.listdir(self.path)
         
     def get_path(self, index):
-        path = os.path.join([self.path, self.frames[index]])
+        path = os.path.join(self.path, self.frames[index])
         return path
     
     def __getitem__(self, index):
         frame = img_as_float32(imread(self.get_path(index)))
-        return frame
+        return {'images': frame.transpose(2, 0, 1)}
     
     def __len__(self):
         return len(self.frames)
@@ -64,8 +64,8 @@ class MetricEvaluater():
         # x, y: image directory
         files_x = os.listdir(x)
         files_y = os.listdir(y)
-        print(f'files_x: {files_x}')
-        print(f'files_y: {files_y}')
+        # print(f'files_x: {files_x}')
+        # print(f'files_y: {files_y}')
         # while True:
         #     continue
         pairs = []
@@ -112,7 +112,7 @@ class MetricEvaluater():
         return torch.abs((x - y)).mean()
     
     def FID(self, x, y, is_path=True):
-        metric = piq.fid()
+        metric = piq.FID()
         if is_path:
             dl_x = self.get_dataloader(x)
             dl_y = self.get_dataloader(y)
@@ -122,7 +122,7 @@ class MetricEvaluater():
 
 
     def SSIM(self, x, y, is_path=True):
-        metric = piq.ssim()
+        metric = piq.ssim
         if is_path:
             pairs = self.get_paired_frames(x, y)
             x = pairs[:, 0]
@@ -130,7 +130,7 @@ class MetricEvaluater():
         return metric(x, y)
 
     def MS_SSIM(self, x, y, is_path=True):
-        metric = piq.multi_scale_ssim()
+        metric = piq.multi_scale_ssim
         if is_path:
             pairs = self.get_paired_frames(x, y)
             x = pairs[:, 0]
@@ -146,7 +146,7 @@ class MetricEvaluater():
         return metric(x, y)
     
     def PSNR(self, x, y, is_path=True):
-        metric = piq.psnr()
+        metric = piq.psnr
         if is_path:
             pairs = self.get_paired_frames(x, y)
             x = pairs[:, 0]
@@ -154,17 +154,17 @@ class MetricEvaluater():
         return metric(x, y)
     
     
-    def AKD(self, x, y, is_path):
+    def AKD(self, x, y, is_path=True):
         # x,y : B x C x H x W images
         if is_path:
             pairs = self.get_paired_frames(x, y)
             x = pairs[:, 0]
             y = pairs[:, 1]
-        bs = len(lm_x)
-        lm_x = self.landmark_model.get_landmarks_batch(x).view(bs, -1)
-        lm_y = self.landmark_model.get_landmarks_batch(y).view(bs, -1)
-        
-        res = np.linalg.norm(lm_x - lm_y, axis=-1).mean()
+        bs = len(x)
+        lm_x = self.landmark_model.get_landmarks_batch(x).reshape((bs, -1, 2))
+        lm_y = self.landmark_model.get_landmarks_batch(y).reshape((bs, -1, 2))
+                
+        res = torch.tensor(np.linalg.norm(lm_x - lm_y, axis=-1).mean()).float()
         return res
     
     def calc_dist_uniformity(self, x, func=None, is_path=True):

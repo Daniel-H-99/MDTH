@@ -61,7 +61,7 @@ dynamic:
     rewrite: False
     use_transformer: True
     extract_driving_code: True
-    relative_headpose: True
+    relative_headpose: False
     stage: 2
     save_frames: True
     

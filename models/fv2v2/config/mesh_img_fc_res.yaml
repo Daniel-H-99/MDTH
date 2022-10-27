@@ -74,7 +74,7 @@ train_params:
   lr_he_estimator: 2.0e-4
   lr_exp_transformer: 2.0e-4
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 12
+  batch_size: 32
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'
@@ -84,10 +84,10 @@ train_params:
     points_tps: 5
   id_classifier_scale: 0.625 # 160 / image size
   loss_weights:
-    generator_gan: 1                  
-    discriminator_gan: 1
+    generator_gan: 0                  
+    discriminator_gan: 0
     feature_matching: [10, 10, 10, 10]
-    perceptual: [10, 10, 10, 10, 10]
+    perceptual: [0, 0, 0, 0, 0]
     equivariance_value: 0
     equivariance_jacobian: 0    # 10
     keypoint: 0
@@ -98,7 +98,7 @@ train_params:
     localized: [0, 0, 0, 0, 0, 0, 0, 0, 0]
     style: 0
     id_cls: 10
-    l1: 10
+    l1: 0
     guide: 10
 
 visualizer_params:

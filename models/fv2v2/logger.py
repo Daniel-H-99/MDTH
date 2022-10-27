@@ -123,14 +123,14 @@ class Logger:
         if (self.epoch + 1) % self.checkpoint_freq == 0:
             self.save_cpk()
         self.log_scores(self.names)
-        self.visualize_rec(inp, out)
+        # self.visualize_rec(inp, out)
 
     def log_ground(self, losses, inp, out):
         self.log_iter(losses)
         _epoch = self.epoch
         self.epoch = -1
         self.log_scores(self.names)
-        self.visualize_rec(inp, out)
+        # self.visualize_rec(inp, out)
         self.epoch = _epoch
         
 class Visualizer:

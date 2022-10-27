@@ -11,7 +11,7 @@ from shutil import copy
 from frames_dataset import FramesDataset3
 
 from modules.generator import OcclusionAwareGenerator, OcclusionAwareSPADEGenerator
-from modules.discriminator import MultiScaleDiscriminator
+from modules.discriminator import Discriminator, MultiScaleDiscriminator
 from modules.keypoint_detector import KPDetector, HEEstimator, ExpTransformer
 
 import torch
@@ -65,18 +65,21 @@ if __name__ == "__main__":
         generator = OcclusionAwareSPADEGenerator(**config['model_params']['generator_params'],
                                                  **config['model_params']['common_params'])
 
-    if torch.cuda.is_available():
-        print('cuda is available')
-        generator.to(opt.device_ids[0])
-    if opt.verbose:
-        print(generator)
-
-    discriminator = MultiScaleDiscriminator(**config['model_params']['discriminator_params'],
-                                            **config['model_params']['common_params'])
-    if torch.cuda.is_available():
-        discriminator.to(opt.device_ids[0])
-    if opt.verbose:
-        print(discriminator)
+    # if torch.cuda.is_available():
+    #     print('cuda is available')
+    #     generator.to(opt.device_ids[0])
+    # if opt.verbose:
+    #     print(generator)
+    generator = None
+    
+    # discriminator = MultiScaleDiscriminator(**config['model_params']['discriminator_params'],
+    #                                         **config['model_params']['common_params'])
+    # if torch.cuda.is_available():
+    #     discriminator.to(opt.device_ids[0])
+        
+    discriminator = None
+    # if opt.verbose:
+    #     print(discriminator)
 
     # kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
     #                            **config['model_params']['common_params'])
@@ -86,13 +89,14 @@ if __name__ == "__main__":
     # if opt.verbose:
     #     print(kp_detector)
 
-    he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
-                               **config['model_params']['common_params'])
+    # he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
+    #                            **config['model_params']['common_params'])
 
-    if torch.cuda.is_available():
-        he_estimator.to(opt.device_ids[0])
+    # if torch.cuda.is_available():
+    #     he_estimator.to(opt.device_ids[0])
 
-
+    he_estimator = None
+    
     exp_transformer = ExpTransformer(**config['model_params']['exp_transformer_params'],
                                **config['model_params']['common_params'])
     

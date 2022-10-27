@@ -1258,13 +1258,13 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         
         exp_transformer.train()
         
-        discriminator.train()
-        for p in discriminator.parameters():
-            p.requires_grad = True
+        # discriminator.train()
+        # for p in discriminator.parameters():
+        #     p.requires_grad = True
 
-        generator.train()
-        for p in generator.parameters():
-            p.requires_grad = True
+        # generator.train()
+        # for p in generator.parameters():
+        #     p.requires_grad = True
 
         self.stage = stage
 

@@ -65,19 +65,19 @@ if __name__ == "__main__":
         generator = OcclusionAwareSPADEGenerator(**config['model_params']['generator_params'],
                                                  **config['model_params']['common_params'])
 
-    # if torch.cuda.is_available():
-    #     print('cuda is available')
-    #     generator.to(opt.device_ids[0])
-    # if opt.verbose:
-    #     print(generator)
-    generator = None
+    if torch.cuda.is_available():
+        print('cuda is available')
+        generator.to(opt.device_ids[0])
+    if opt.verbose:
+        print(generator)
+    # generator = None
     
-    # discriminator = MultiScaleDiscriminator(**config['model_params']['discriminator_params'],
-    #                                         **config['model_params']['common_params'])
-    # if torch.cuda.is_available():
-    #     discriminator.to(opt.device_ids[0])
+    discriminator = MultiScaleDiscriminator(**config['model_params']['discriminator_params'],
+                                            **config['model_params']['common_params'])
+    if torch.cuda.is_available():
+        discriminator.to(opt.device_ids[0])
         
-    discriminator = None
+    # discriminator = None
     # if opt.verbose:
     #     print(discriminator)
 

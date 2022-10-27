@@ -174,7 +174,7 @@ def run_exp(materials):
 		session_names.append(session_name)
 	
 	### evaluation
-	eval_exp(materials, session_names)
+	# eval_exp(materials, session_names)
 	
 	setattr(materials, 'result', types.SimpleNamespace())
 	materials.result.session_names = session_names

@@ -941,12 +941,12 @@ class GeneratorFullModelWithSeg(torch.nn.Module):
         self.he_estimator_ref = he_estimator_ref
         self.train_params = train_params
         self.scales = train_params['scales']
-        # self.disc_scales = self.discriminator.scales
-        # self.pyramid = ImagePyramide(self.scales, generator.image_channel)
-        # self.pyramid_cond = ImagePyramide(self.scales, generator.image_channel + 1)
-        # if torch.cuda.is_available():
-        #     self.pyramid = self.pyramid.cuda()
-        #     self.pyramid_cond = self.pyramid_cond.cuda()
+        self.disc_scales = self.discriminator.scales
+        self.pyramid = ImagePyramide(self.scales, generator.image_channel)
+        self.pyramid_cond = ImagePyramide(self.scales, generator.image_channel + 1)
+        if torch.cuda.is_available():
+            self.pyramid = self.pyramid.cuda()
+            self.pyramid_cond = self.pyramid_cond.cuda()
             
         self.loss_weights = train_params['loss_weights']
 
@@ -1258,13 +1258,13 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         
         exp_transformer.train()
         
-        # discriminator.train()
-        # for p in discriminator.parameters():
-        #     p.requires_grad = True
+        discriminator.train()
+        for p in discriminator.parameters():
+            p.requires_grad = True
 
-        # generator.train()
-        # for p in generator.parameters():
-        #     p.requires_grad = True
+        generator.train()
+        for p in generator.parameters():
+            p.requires_grad = True
 
         self.stage = stage
 
@@ -1281,9 +1281,9 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                     p.requires_grad = True
             self.exp_transformer.train()
 
-            # generator.eval()
-            # for p in generator.parameters():
-            #     p.requires_grad = False
+            generator.eval()
+            for p in generator.parameters():
+                p.requires_grad = False
             
         #     self.id_classifier_scale = train_params['id_classifier_scale']
         #     self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
@@ -1609,30 +1609,30 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             # print(f'kp_driving value: {kp_driving["value"]}')
             
             generated = {}
-            # generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
-            # generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
-            # pyramide_real = self.pyramid(x['driving'])
-            # pyramide_generated = self.pyramid(generated['prediction'])
+            generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
+            generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+            pyramide_real = self.pyramid(x['driving'])
+            pyramide_generated = self.pyramid(generated['prediction'])
             
-            # generated['source_kp_canonical'] = {'value': kp_source['canonical']}
-            # generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
-            # generated['source_mesh_image'] = kp_source['mesh_img_sec']
-            # generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
+            generated['source_kp_canonical'] = {'value': kp_source['canonical']}
+            generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
+            generated['source_mesh_image'] = kp_source['mesh_img_sec']
+            generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
             
-            # if cycled_drive:
-            #     ## cycled expression drive
-            #     delta_style_code = tf_output['src_embedding']['delta_style_code']
-            #     delta_exp_code = tf_output['src_embedding']['delta_exp_code']
-            #     delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
-            #     src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
-            #     source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': - src_delta + src_delta_cycled}
+            if cycled_drive:
+                ## cycled expression drive
+                delta_style_code = tf_output['src_embedding']['delta_style_code']
+                delta_exp_code = tf_output['src_embedding']['delta_exp_code']
+                delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
+                src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
+                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': - src_delta + src_delta_cycled}
 
-            #     kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
+                kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 
-            #     generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
-            #     for k, v in list(generated_cycled.items()):
-            #         generated[f'{k}_cycled'] = v
-            #     generated['kp_driving_cycled'] = kp_source_cycled
+                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
+                for k, v in list(generated_cycled.items()):
+                    generated[f'{k}_cycled'] = v
+                generated['kp_driving_cycled'] = kp_source_cycled
                 
             if self.loss_weights['guide'] != 0:
                 delta_GT = (kp_canonical_drv['value'] - kp_canonical['value']).flatten(1)

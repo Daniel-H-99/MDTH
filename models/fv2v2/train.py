@@ -29,7 +29,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
         optimizer = torch.optim.Adam(delta_params, lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
         optimizer_generator = None
     
-    # optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
     # optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
     # optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
 
@@ -55,8 +55,8 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
         scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
 
-    # scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
-                                        #   last_epoch=start_epoch - 1)
+    scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
+                                          last_epoch=start_epoch - 1)
     # scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, train_params['epoch_milestones'], gamma=0.1,
     #                                     last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
     # scheduler_he_estimator = MultiStepLR(optimizer_he_estimator, train_params['epoch_milestones'], gamma=0.1,
@@ -69,7 +69,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
 
     trainer = ExpTransformerTrainer(stage, exp_transformer, kp_detector, he_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'], device_ids=device_ids)
     # generator_full = GeneratorFullModel(kp_detector, he_estimator, generator, discriminator, train_params, estimate_jacobian=config['model_params']['common_params']['estimate_jacobian'])
-    # discriminator_full = DiscriminatorFullModelWithSeg(generator, discriminator, train_params)
+    discriminator_full = DiscriminatorFullModelWithSeg(generator, discriminator, train_params)
 
     if torch.cuda.is_available():
         # generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
@@ -138,7 +138,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             scheduler.step()
             if stage == 1:
                 scheduler_generator.step()
-            # scheduler_discriminator.step()
+            scheduler_discriminator.step()
             # scheduler_kp_detector.step()
             # scheduler_he_estimator.step()
             
@@ -162,14 +162,14 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 'optimizer_discriminator': optimizer_discriminator}, inp=x, out=generated)
             elif stage == 2:
                 logger.log_epoch(epoch, {'exp_transformer': exp_transformer, 
-                # 'generator': generator,
-                # 'discriminator': discriminator,
+                'generator': generator,
+                'discriminator': discriminator,
                 # 'kp_detector': kp_detector,
                 # 'he_estimator': he_estimator,
                 'optimizer_exp_transformer': optimizer,
                 # 'optimizer_kp_detector': optimizer_kp_detector,
                 # 'optimizer_he_estimator': optimizer_he_estimator, 
-                # 'optimizer_discriminator': optimizer_discriminator
+                'optimizer_discriminator': optimizer_discriminator
                 }, inp=x, out=generated)
 
 def train_baseline(config, generator, discriminator, kp_detector, he_estimator, checkpoint, log_dir, dataset, device_ids, checkpoint_ref=None, he_estimator_ref=None):

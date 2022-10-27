@@ -72,11 +72,11 @@ class Logger:
         
         if exp_transformer is not None:
             _state = exp_transformer.state_dict()
-            for k, v in checkpoint['exp_transformer'].items():
-                if 'delta' not in k:
-                    _state[k] = v
+            # for k, v in checkpoint['exp_transformer'].items():
+            #     if 'delta' not in k:
+            #         _state[k] = v
             # _state = checkpoint['exp_transformer']
-            # _state.update(checkpoint['exp_transformer'])
+            _state.update(checkpoint['exp_transformer'])
             exp_transformer.load_state_dict(_state)
         if hie_estimator is not None:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])
@@ -123,14 +123,14 @@ class Logger:
         if (self.epoch + 1) % self.checkpoint_freq == 0:
             self.save_cpk()
         self.log_scores(self.names)
-        # self.visualize_rec(inp, out)
+        self.visualize_rec(inp, out)
 
     def log_ground(self, losses, inp, out):
         self.log_iter(losses)
         _epoch = self.epoch
         self.epoch = -1
         self.log_scores(self.names)
-        # self.visualize_rec(inp, out)
+        self.visualize_rec(inp, out)
         self.epoch = _epoch
         
 class Visualizer:

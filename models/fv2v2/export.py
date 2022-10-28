@@ -500,15 +500,15 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
-                src_feat = he_estimator(source)['out']
+                # src_feat = he_estimator(source)['out']
                 
-            drv_feat = he_estimator(driving_frame)['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # drv_feat = he_estimator(driving_frame)['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
-            tf_output = exp_transformer({'feat': src_feat, 'mesh': _source_mesh['value']}, {'feat': drv_feat, 'mesh': _driving_mesh['value']})
+            tf_output = exp_transformer({'img': source, 'mesh': _source_mesh['value']}, {'img': driving_frame, 'mesh': _driving_mesh['value']})
 
             src_embedding = tf_output['src_embedding']
             drv_embedding = tf_output['drv_embedding']

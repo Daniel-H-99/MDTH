@@ -1008,10 +1008,10 @@ class GeneratorFullModelWithSeg(torch.nn.Module):
             motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w
             it_section = x['driving_mesh']['raw_value'] # B x N x 3
             motion_GT = x['source_mesh']['raw_value'] # B x N x 3
-            it_section_eye = it_section[:,  x['source_mesh']['MP_EYE_SECTIONS'][0].long()]
-            motion_GT_eye = motion_GT[:,  x['source_mesh']['MP_EYE_SECTIONS'][0].long()]
-            it_section_mouth = it_section[:,  x['source_mesh']['MP_MOUTH_SECTIONS'][0].long()]
-            motion_GT_mouth = motion_GT[:,  x['source_mesh']['MP_MOUTH_SECTIONS'][0].long()]
+            it_section_eye = it_section[:,  x['source_mesh']['OPENFACE_EYE_IDX'][0].long()]
+            motion_GT_eye = motion_GT[:,  x['source_mesh']['OPENFACE_EYE_IDX'][0].long()]
+            it_section_mouth = it_section[:,  x['source_mesh']['OPENFACE_LIP_IDX'][0].long()]
+            motion_GT_mouth = motion_GT[:,  x['source_mesh']['OPENFACE_LIP_IDX'][0].long()]
             # print(f'it section shape: {it_section.shape}')
             # print(f'motion_GT section shape: {motion_GT.shape}')
             # print(f'motion shape: {motion.shape}')
@@ -1383,8 +1383,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'motion_section: {motion_section}')
                 # print(f'motion_section_GT : {motion_GT}')
                 
-                loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
-                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
+                loss_values['motion_match'] = 0 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
+                                                + 0 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
                                                 + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
             if np.array(self.loss_weights['localized']).sum() != 0:

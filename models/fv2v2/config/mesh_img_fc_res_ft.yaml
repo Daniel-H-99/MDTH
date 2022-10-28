@@ -72,9 +72,9 @@ train_params:
   lr_discriminator: 2.0e-4
   lr_kp_detector: 2.0e-4
   lr_he_estimator: 2.0e-4
-  lr_exp_transformer: 5.0e-6
+  lr_exp_transformer: 2.0e-4
   gan_mode: 'hinge'    # hinge or ls
-  batch_size: 12
+  batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
   checkpoint_freq: 10
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'
@@ -92,14 +92,14 @@ train_params:
     equivariance_jacobian: 0    # 10
     keypoint: 0
     headpose: 0
-    motion_match: 0
+    motion_match: 50
     log: 0
     expression: 0
     localized: [0, 0, 0, 0, 0, 0, 0, 0, 0]
     style: 0
     id_cls: 10
-    l1: 10
-    guide: 0
+    l1: 0
+    guide: 50
 
 visualizer_params:
   kp_size: 5

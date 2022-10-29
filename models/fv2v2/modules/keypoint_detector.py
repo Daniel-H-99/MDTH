@@ -225,14 +225,12 @@ class ExpTransformer(nn.Module):
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         
-        self.delta_id_encoder = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim, output_dim=self.latent_dim, depth=2)
+        self.delta_id_encoder = LinearEncoder(input_dim=3 * num_kp, latent_dim=self.latent_dim, output_dim=self.latent_dim, depth=2)
         self.delta_kp_decoder = nn.Sequential(
             nn.Linear(self.latent_dim, self.num_kp * 3),
             nn.Tanh()
         )
-
-
-
+        
         self.delta_style_encoder = LinearEncoder(input_dim=3 * self.num_kp, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=2)
         self.delta_exp_encoder = LinearEncoder(input_dim=2048, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
         self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
@@ -249,7 +247,7 @@ class ExpTransformer(nn.Module):
     def encode(self, x, placeholder=['kp', 'exp', 'style']):
         output = {}
         if 'kp' in placeholder:
-            id_embedding = self.delta_id_encoder(x['feat'])
+            id_embedding = self.delta_id_encoder(x['state'])
             output['kp'] = id_embedding
             
         if 'exp' in placeholder:
@@ -277,7 +275,7 @@ class ExpTransformer(nn.Module):
     
         return res
 
-    def forward(self, src, drv, placeholder=['kp', 'delta']):
+    def forward(self, src, drv, placeholder=['kp', 'exp', 'style']):
         src_embedding = self.encode(src, placeholder=placeholder)
         drv_embedding = self.encode(drv, placeholder=placeholder)
 
@@ -290,6 +288,10 @@ class ExpTransformer(nn.Module):
         if 'kp' in placeholder:
             output['kp_src'] = src_output['kp']
             output['kp_drv'] = drv_output['kp']
+            
+        if 'exp' in placeholder and 'style' in placeholder:
+            output['delta_src'] = src_output['delta']
+            output['delta_drv'] = drv_output['delta']
             
         return  output
 

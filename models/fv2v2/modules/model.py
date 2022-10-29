@@ -1562,9 +1562,12 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
+            tf_output = self.exp_transformer({'feat': he_src['out'], 'state': kp_canonical['value']}, {'feat': he_drv['out'], 'state': kp_canonical['value']}, placeholder=['kp', 'exp'])
+            
+            
+            
             kp_source = keypoint_transformation(kp_canonical, he_src)
             
-            tf_output = self.exp_transformer({'feat': he_src['out']}, {'feat': he_drv['out']}, placeholder=['kp', 'exp'])
 
             kp_canonical_src = {'value': kp_canonical['value'] + tf_output['kp_src']}
             kp_canonical_drv = {'value': kp_canonical['value'] + tf_output['kp_drv']}

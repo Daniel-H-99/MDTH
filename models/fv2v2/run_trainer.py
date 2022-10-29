@@ -78,10 +78,10 @@ if __name__ == "__main__":
     if opt.verbose:
         print(discriminator)
 
-    # kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
-    #                            **config['model_params']['common_params'])
-    # if torch.cuda.is_available():
-    #     kp_detector.to(opt.device_ids[0])
+    kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
+                               **config['model_params']['common_params'])
+    if torch.cuda.is_available():
+        kp_detector.to(opt.device_ids[0])
 
     # if opt.verbose:
     #     print(kp_detector)
@@ -115,4 +115,4 @@ if __name__ == "__main__":
         
     if opt.mode == 'train':
         print(f"Training with stage {opt.stage}...")
-        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, None, he_estimator, opt.checkpoint, ckpt_ref, log_dir, dataset, opt.device_ids)
+        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, kp_detector, he_estimator, opt.checkpoint, ckpt_ref, log_dir, dataset, opt.device_ids)

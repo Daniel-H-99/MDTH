@@ -175,6 +175,7 @@ class FramesDataset3(Dataset):
         mesh["value"] = lm_scaled_3d.astype(np.float32)
         mesh["U"] = U.astype(np.float32)
         mesh["scale"] = scale
+        
         # print(f'landmark: {lm}')
         # print(f'mesh: {mesh}')
 
@@ -233,7 +234,7 @@ class FramesDataset3(Dataset):
                 raw_video_array = [io.imread(os.path.join(path, frames[(idx + int(datetime.now().timestamp())) % num_frames])) for idx in frame_idx]
                 video_array = np.stack([cv2.resize(img_as_float32(frame), self.frame_shape[:2]) for frame in raw_video_array], axis=0)
 
-                meshes = []
+                # meshes = []
 
                 for i, frame in enumerate(video_array):
                     L = self.frame_shape[0]
@@ -308,13 +309,13 @@ class FramesDataset3(Dataset):
                     # print(f'data type: {mesh["value"].dtype}')
                     meshes.append(mesh)
                     
-                # ### Make intermediate target mesh ###
-                # src_mesh = meshes[0]
-                # drv_mesh = meshes[1]
-                # target_mesh = (1 / src_mesh['c'][np.newaxis, np.newaxis]) * np.einsum('ij,nj->ni', np.linalg.inv(src_mesh['R']), drv_mesh['value'] - src_mesh['t'][np.newaxis, :, 0])
-                # drv_mesh['intermediate_value'] = target_mesh
-                # target_mesh = L * (target_mesh - np.squeeze(A, axis=-1)[None]) // 2
-                # drv_mesh['intermediate_mesh_img_sec'] = self.get_mesh_image_section(target_mesh)
+                ### Make intermediate target mesh ###
+                src_mesh = meshes[0]
+                drv_mesh = meshes[1]
+                target_mesh = (1 / src_mesh['c'][np.newaxis, np.newaxis]) * np.einsum('ij,nj->ni', np.linalg.inv(src_mesh['R']), drv_mesh['value'] - src_mesh['t'][np.newaxis, :, 0])
+                drv_mesh['intermediate_value'] = target_mesh
+                target_mesh = L * (target_mesh - np.squeeze(A, axis=-1)[None]) // 2
+                drv_mesh['intermediate_mesh_img_sec'] = self.get_mesh_image_section(target_mesh)
                 
                 break
             
@@ -329,8 +330,8 @@ class FramesDataset3(Dataset):
         driving = np.array(video_array[1], dtype='float32')
         out['driving'] = driving.transpose((2, 0, 1))
         out['source'] = source.transpose((2, 0, 1))
-        out['driving_mesh'] = meshes[1]
-        out['source_mesh'] = meshes[0]
+        # out['driving_mesh'] = meshes[1]
+        # out['source_mesh'] = meshes[0]
         out['hit'] = 0
         out['name'] = path
         # out['hopenet_source'] = hopenet_video_array[0]

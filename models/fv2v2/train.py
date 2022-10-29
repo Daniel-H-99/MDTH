@@ -29,7 +29,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
         optimizer = torch.optim.Adam(delta_params, lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
         optimizer_generator = None
     
-    # optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'], betas=(0.5, 0.999))
     # optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
     # optimizer_he_estimator = torch.optim.Adam(he_estimator.parameters(), lr=train_params['lr_kp_detector'], betas=(0.5, 0.999))
 
@@ -43,11 +43,11 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     if checkpoint is not None:
         # start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator)
         # start_epoch = 0
-        start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, optimizer_exp_transformer=optimizer)
+        start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator, kp_detector=kp_detector, he_estimator=he_estimator, optimizer_exp_transformer=optimizer)
     else:
         start_epoch = 0
         
-    # start_epoch = 0
+    start_epoch = 0
     # print(f'start epoch: {start_epoch}')
     scheduler = MultiStepLR(optimizer, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
@@ -55,8 +55,8 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
         scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
                                       last_epoch=start_epoch - 1)
 
-    # scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
-    #                                       last_epoch=start_epoch - 1)
+    scheduler_discriminator = MultiStepLR(optimizer_discriminator, train_params['epoch_milestones'], gamma=0.1,
+                                          last_epoch=start_epoch - 1)
     # scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, train_params['epoch_milestones'], gamma=0.1,
     #                                     last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
     # scheduler_he_estimator = MultiStepLR(optimizer_he_estimator, train_params['epoch_milestones'], gamma=0.1,
@@ -120,17 +120,17 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 # optimizer_he_estimator.step()
                 # optimizer_he_estimator.zero_grad()
                 
-                # if train_params['loss_weights']['generator_gan'] != 0:
-                #     optimizer_discriminator.zero_grad()
-                #     losses_discriminator = discriminator_full(x, generated)
-                #     loss_values = [val.mean() for val in losses_discriminator.values()]
-                #     loss = sum(loss_values)
+                if train_params['loss_weights']['generator_gan'] != 0:
+                    optimizer_discriminator.zero_grad()
+                    losses_discriminator = discriminator_full(x, generated)
+                    loss_values = [val.mean() for val in losses_discriminator.values()]
+                    loss = sum(loss_values)
 
-                #     loss.backward()
-                #     optimizer_discriminator.step()
-                #     optimizer_discriminator.zero_grad()
-                # else:
-                #     losses_discriminator = {}
+                    loss.backward()
+                    optimizer_discriminator.step()
+                    optimizer_discriminator.zero_grad()
+                else:
+                    losses_discriminator = {}
 
                 losses_generator.update(losses_discriminator)
                 losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
@@ -139,7 +139,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             scheduler.step()
             if stage == 1:
                 scheduler_generator.step()
-            # scheduler_discriminator.step()
+            scheduler_discriminator.step()
             # scheduler_kp_detector.step()
             # scheduler_he_estimator.step()
             
@@ -170,7 +170,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 'optimizer_exp_transformer': optimizer,
                 # 'optimizer_kp_detector': optimizer_kp_detector,
                 # 'optimizer_he_estimator': optimizer_he_estimator, 
-                # 'optimizer_discriminator': optimizer_discriminator,
+                'optimizer_discriminator': optimizer_discriminator,
                 }, inp=x, out=generated)
 
 def train_baseline(config, generator, discriminator, kp_detector, he_estimator, checkpoint, log_dir, dataset, device_ids, checkpoint_ref=None, he_estimator_ref=None):

@@ -168,29 +168,25 @@ def get_rotation_matrix(yaw, pitch, roll):
 '''
 
 
-# def keypoint_transformation(kp_canonical, mesh):
-#     device = kp_canonical['value'].device
+def keypoint_transformation(kp_canonical, mesh):
+    device = kp_canonical['value'].device
     
-#     if 'delta' in mesh:
-#         kp_normed = kp_canonical['value'] + mesh['delta']
-#     else:
-#         kp_normed = kp_canonical['value']
+    kp_normed = kp_canonical['value'] + mesh['delta']
         
-#     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
-#     tmp = tmp.matmul(mesh['U']) # B x N x 4
-#     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-#     # tmp[:, :, 2] = -tmp[:, :, 2]
-#     kp_transformed = tmp # B x N x 3
+    tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['U']) # B x N x 4
+    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    # tmp[:, :, 2] = -tmp[:, :, 2]
+    kp_transformed = tmp # B x N x 3
     
-    
-#     tmp = kp_canonical['value']
+    tmp = kp_canonical['value']
 
-#     tmp = torch.cat([tmp, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
-#     tmp = tmp.matmul(mesh['U']) # B x N x 4
-#     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-#     kp_canonical_transformed = tmp # B x N x 3
+    tmp = torch.cat([tmp, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['U']) # B x N x 4
+    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    kp_canonical_transformed = tmp # B x N x 3
 
-#     return {'value': kp_transformed, 'normed': kp_normed, 'canonical': kp_canonical_transformed}         
+    return {'value': kp_transformed, 'normed': kp_normed, 'canonical': kp_canonical_transformed}         
     
         
 def get_rotation_matrix(yaw, pitch, roll):
@@ -222,27 +218,27 @@ def get_rotation_matrix(yaw, pitch, roll):
     return rot_mat
 
 
-def keypoint_rotation(kp_canonical, he):
-    kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
-    yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
-    t, exp = he['t'], he['exp']
+# def keypoint_rotation(kp_canonical, he):
+#     kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
+#     yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
+#     t, exp = he['t'], he['exp']
         
-    yaw = headpose_pred_to_degree(yaw)
-    pitch = headpose_pred_to_degree(pitch)
-    roll = headpose_pred_to_degree(roll)
+#     yaw = headpose_pred_to_degree(yaw)
+#     pitch = headpose_pred_to_degree(pitch)
+#     roll = headpose_pred_to_degree(roll)
 
-    rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
+#     rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
     
-    # keypoint rotation
-    kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
+#     # keypoint rotation
+#     kp_rotated = torch.einsum('bmp,bkp->bkm', rot_mat, kp)
 
-    # keypoint translation
-    t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
+#     # keypoint translation
+#     t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
 
-    return {'value': kp_rotated, 't': t}
+#     return {'value': kp_rotated, 't': t}
 
 
-def keypoint_transformation(kp_canonical, he, estimate_jacobian=False):
+def keypoint_transformation_he(kp_canonical, he, estimate_jacobian=False):
     kp = torch.tensor(kp_canonical['value'])    # (bs, k, 3)
     yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
     t, exp = he['t'], he['exp']
@@ -1276,9 +1272,9 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         
         exp_transformer.train()
         
-        # discriminator.train()
-        # for p in discriminator.parameters():
-        #     p.requires_grad = True
+        discriminator.train()
+        for p in discriminator.parameters():
+            p.requires_grad = True
 
         # generator.train()
         # for p in generator.parameters():
@@ -1556,34 +1552,28 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
-            he_src = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            he_drv = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            source_mesh = x['source_mesh']
+            driving_mesh = x ['driving_mesh']
+            
+            he_src = self.he_estimator(x['source'])       # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            feat_src = he_src['out']
+            feat_drv = self.he_estimator(x['driving'])['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
-            tf_output = self.exp_transformer({'feat': he_src['out'], 'state': kp_canonical['value']}, {'feat': he_drv['out'], 'state': kp_canonical['value']}, placeholder=['kp', 'exp'])
+            tf_output = self.exp_transformer({'feat': feat_src, 'state': kp_canonical['value'].flatten(1)}, {'feat': feat_drv, 'state': kp_canonical['value'].flatten(1)}, placeholder=['kp', 'exp', 'style'])
             
+            kp_canonical_src = {'value': tf_output['kp_src']}
+            kp_canonical_drv = {'value': tf_output['kp_drv']}
             
+            source_mesh['delta'] = tf_output['delta_src']
+            driving_mesh['delta'] = tf_output['delta_drv']
             
-            kp_source = keypoint_transformation(kp_canonical, he_src)
-            
+            kp_source = keypoint_transformation(kp_canonical_src, source_mesh)
+            kp_driving = keypoint_transformation(kp_canonical_drv, driving_mesh)
 
-            kp_canonical_src = {'value': kp_canonical['value'] + tf_output['kp_src']}
-            kp_canonical_drv = {'value': kp_canonical['value'] + tf_output['kp_drv']}
-
-            kp_rot_src = keypoint_rotation(kp_canonical_src, he_src)
-            kp_rot_drv = keypoint_rotation(kp_canonical_drv, he_drv)
-            
-            style_src = self.exp_transformer.encode({'state': kp_rot_src['value'].flatten(1)}, placeholder=['style'])['delta_style_code']
-            style_drv = self.exp_transformer.encode({'state': kp_rot_drv['value'].flatten(1)}, placeholder=['style'])['delta_style_code']
-            
-            delta_drv_embedding = {'delta_exp_code': tf_output['drv_embedding']['delta_exp_code'], 'delta_style_code': style_drv}
-            
-            delta_drv = self.exp_transformer.decode(delta_drv_embedding)['delta']
-            
-            kp_driving = {'value': kp_rot_drv['value'] + delta_drv + kp_rot_drv['t']}
-            
+            kp_source_he = keypoint_transformation_he(kp_canonical, he_src)
             
             
             # delta_src_embedding = {'delta_style_code': tf_output['src_embedding']['delta_style_code'], 'delta_exp_code': tf_output['src_embedding']['delta_exp_code']}
@@ -1642,25 +1632,26 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             # print(f'kp_source value: {kp_source["value"]}')
             # print(f'kp_driving value: {kp_driving["value"]}')
             
-            generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
-            generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+            generated = self.generator(x['source'], kp_source=kp_source_he, kp_driving=kp_driving)
+            generated.update({'kp_source': kp_source_he, 'kp_driving': kp_driving})
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
             
-            generated['source_kp_canonical'] = {'value': kp_rot_src['value']}
-            generated['driving_kp_canonical'] = {'value': kp_rot_drv['value']}
+            generated['source_kp_canonical'] = {'value': kp_source['canonical']}
+            generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
             # generated['source_mesh_image'] = kp_source['mesh_img_sec']
             # generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
             
             if cycled_drive:
                 ## cycled expression drive
-                delta_style_code = style_src
+                delta_style_code = tf_output['src_embedding']['delta_style_code']
                 delta_exp_code = tf_output['src_embedding']['delta_exp_code']
                 delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
                 src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
-                kp_source_cycled = {'value': kp_rot_src['value'] + src_delta_cycled + kp_rot_src['t']}
+                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': src_delta_cycled}
+                kp_source_cycled = keypoint_transformation(kp_canonical_src, source_mesh_cycled)
 
-                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
+                generated_cycled = self.generator(x['source'], kp_source=kp_source_he, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):
                     generated[f'{k}_cycled'] = v
                 generated['kp_source_cycled'] = kp_source_cycled
@@ -1857,7 +1848,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['headpose'] = self.loss_weights['headpose'] * value
 
             if self.loss_weights['expression'] != 0:
-                value = torch.norm(driving_mesh['exp'], p=1, dim=-1).mean()
+                value = torch.norm(driving_mesh['delta'], p=1, dim=-1).mean()
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
 

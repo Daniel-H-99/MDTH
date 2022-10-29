@@ -33,35 +33,42 @@ class THPipeline():
         self.landmark_model = export.load_landmark_model(self.config.config.common.checkpoints.landmark_model.dir, self.gpus)
         self.kp_extractor = None
         
-    def preprocess_image(self, img_name, rewrite=False):
+    def preprocess_image(self, img_name, rewrite=False, preprocess=True, extract_landmarks=True):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
         src_path = os.path.join(src_dir, img_name)
         dest_path = os.path.join(dest_dir, self.process_name(img_name))
         dest_file_path = os.path.join(dest_path, 'image.png')
-        if not os.path.exists(dest_path):
-            os.makedirs(dest_path)
-        elif rewrite:
-            shutil.rmtree(dest_path, ignore_errors=True)
-            os.makedirs(dest_path)
-        self.landmark_model.preprocess_image(src_path, dest_file_path)
-        export.extract_landmark_from_img(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
+        if preprocess:
+            if not os.path.exists(dest_path):
+                os.makedirs(dest_path)
+            elif rewrite:
+                shutil.rmtree(dest_path, ignore_errors=True)
+                os.makedirs(dest_path)
+            self.landmark_model.preprocess_image(src_path, dest_file_path)
+        if extract_landmarks:
+            export.extract_landmark_from_img(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
             
-    def preprocess_video(self, video_name, rewrite=False):
+    def preprocess_video(self, video_name, rewrite=False, preprocess=True, extract_landmarks=True):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
         src_path = os.path.join(src_dir, video_name)
         dest_path = os.path.join(dest_dir, self.process_name(video_name))
         dest_file_path = os.path.join(dest_path, 'video.mp4')
-        if not os.path.exists(dest_path):
-            os.makedirs(dest_path)
-        elif rewrite:
-            shutil.rmtree(dest_path, ignore_errors=True)
-            os.makedirs(dest_path)
-        self.landmark_model.preprocess_video(src_path, dest_file_path)
-        rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
-        
-        if rewritten:
+        if preprocess:
+            if not os.path.exists(dest_path):
+                os.makedirs(dest_path)
+            elif rewrite:
+                shutil.rmtree(dest_path, ignore_errors=True)
+                os.makedirs(dest_path)
+            self.landmark_model.preprocess_video(src_path, dest_file_path)
+            
+        if extract_landmarks:
+            rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
+        else:
+            rewritten = False
+            
+        if preprocess and rewritten:
             frames_dir = os.path.join(dest_path, 'frames')
             if os.path.exists(frames_dir):
                 shutil.rmtree(frames_dir)

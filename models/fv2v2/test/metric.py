@@ -27,8 +27,8 @@ import os
 import sys
 root_dir = str(pathlib.Path(__file__).parent / '..')
 sys.path.insert(0, root_dir)
-
 from modules.landmark_model import LandmarkModel
+# from pipelines.landmark_model import LandmarkModel
 
 
 
@@ -160,6 +160,7 @@ class MetricEvaluater():
             pairs = self.get_paired_frames(x, y)
             x = pairs[:, 0]
             y = pairs[:, 1]
+            
         bs = len(x)
         lm_x = self.landmark_model.get_landmarks_batch(x).reshape((bs, -1, 2))
         lm_y = self.landmark_model.get_landmarks_batch(y).reshape((bs, -1, 2))

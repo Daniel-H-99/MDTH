@@ -15,6 +15,11 @@ import csv
 import torch
 import types
 import glob
+import time
+from tqdm import tqdm
+import logging
+
+
 
 class MetricItem():
     def __init__(self, name, func, post_fix=''):
@@ -68,28 +73,65 @@ def read_config(config_path):
 
 def setup_exp(args, config):
 	materials = {}
-	pipeline = THPipeline(config, config.dynamic.gpus)
-	materials['label'] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-	if config.dynamic.label is not None:
-		materials['label'] = '_'.join([config.dynamic.label, materials['label']])
-	cwd = os.path.join(config.env.res_path, materials['label'])
-	os.makedirs(cwd)
-	shutil.copy(args.config, os.path.join(cwd, 'config.yaml'))
-	os.makedirs(os.path.join(cwd, 'inputs'))
-	os.makedirs(os.path.join(cwd, 'metrics'))
-	test_samples = construct_test_samples(config, cwd=cwd)
-	materials['cwd'] = cwd
-	materials['config'] = config
-	materials['pipeline'] = pipeline
-	materials['test_samples'] = test_samples
-	materials['metric'] = MetricEvaluater(config)
-	materials['metric_names'] = {
-     'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR']
-	}
+	if len(config.dynamic.load_exp) == 0:
+		pipeline = THPipeline(config, config.dynamic.gpus)
+		materials['label'] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+		if config.dynamic.label is not None:
+			materials['label'] = '_'.join([config.dynamic.label, materials['label']])
+		cwd = os.path.join(config.env.res_path, materials['label'])
+		os.makedirs(cwd)
+		shutil.copy(args.config, os.path.join(cwd, 'config.yaml'))
+		os.makedirs(os.path.join(cwd, 'inputs'))
+		os.makedirs(os.path.join(cwd, 'metrics'))
+		test_samples = construct_test_samples(config, cwd=cwd)
+		materials['cwd'] = cwd
+		materials['config'] = config
+		materials['pipeline'] = pipeline
+		materials['test_samples'] = test_samples
+		materials['metric'] = MetricEvaluater(config)
+		materials['metric_names'] = {
+		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR']
+		}
+		materials['logger'] = make_logger(cwd)
 
+	else:
+		loaded_materials = torch.load(config.dynamic.load_exp)
+		setattr(loaded_materials, 'metric', MetricEvaluater(loaded_materials.config))
+		setattr(loaded_materials, 'metric_names', {
+		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR']
+		})
+		print(f'check 0: {loaded_materials.metric}')
+		materials['loaded_materials'] = loaded_materials
+		materials['config'] = config
+		materials['logger'] = make_logger(loaded_materials.cwd)
+
+	# materials['logger'] = logger
+ 
 	materials = AttrDict.from_nested_dicts(materials)
 	
 	return materials
+
+def make_logger(cwd):
+	# 로그 생성
+	logger = logging.getLogger()
+
+	# 로그의 출력 기준 설정
+	logger.setLevel(logging.INFO)
+
+	# log 출력 형식
+	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+	# log 출력
+	stream_handler = logging.StreamHandler()
+	stream_handler.setFormatter(formatter)
+	logger.addHandler(stream_handler)
+
+	# log를 파일에 출력
+	file_handler = logging.FileHandler(os.path.join(cwd, 'log.log'))
+	file_handler.setFormatter(formatter)
+	logger.addHandler(file_handler)
+ 
+	return logger
 
 def write_scores(scores, materials):
 	output_score_file = os.path.join(materials.cwd, 'metrics', 'scores.csv')
@@ -127,7 +169,7 @@ def eval_iter_sessions(func, materials, session_names, post_fix=''):
 	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x), session_names))
 
 	for session_name, session_dir in zip(session_names, session_dirs):
-		inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'), dtype=str)
+		inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'), dtype=str, comments='#')
 		print(f'inputs: {inputs}')
 		source, driving = inputs
 		# with open(os.path.join(session_dir, 'inputs.txt'), 'r') as f:
@@ -144,12 +186,13 @@ def eval_iter_sessions(func, materials, session_names, post_fix=''):
 	
 	return scores
 
-def eval_exp(materials, session_names):
+def eval_exp(materials):
 	metric = materials.metric
+	session_names = materials.session_names
 	scores = {}
  
 	### same identity evaluation
-	for metric_name in materials.metric_names.same_identity:
+	for metric_name in tqdm(materials.metric_names.same_identity):
 		meta_info = METRIC_META[metric_name]
 		metric_score = eval_iter_sessions(getattr(metric, meta_info.func), materials, session_names, post_fix=meta_info.post_fix)
 		scores[metric_name] = metric_score
@@ -160,41 +203,69 @@ def eval_exp(materials, session_names):
 
 def run_session(config, src, drv, pipeline, label):
     ### preprocess
-	if not config.dynamic.processed_inputs:
-		if src.endswith('.mp4'):
-			pipeline.preprocess_video(src, rewrite=config.dynamic.rewrite)
-		else:
-			pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite)
-		pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
+	if src.endswith('.mp4'):
+		pipeline.preprocess_video(src, rewrite=config.dynamic.rewrite, preprocess=config.dynamic.preprocess, extract_landmarks=config.dynamic.extract_landmarks)
+	else:
+		pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite, preprocess=config.dynamic.preprocess, extract_landmarks=config.dynamic.extract_landmarks)
+		
+	pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite, preprocess=config.dynamic.preprocess, extract_landmarks=config.dynamic.extract_landmarks)
 		
 	### inference
 	session_dir = pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer, extract_driving_code=config.dynamic.extract_driving_code, stage=config.dynamic.stage, relative_headpose=config.dynamic.relative_headpose, save_frames=config.dynamic.save_frames)
 	return session_dir
 
-
 def run_exp(materials):
-	session_names = []
-	for src, drv in materials.test_samples:
-		print(f'running session: {(src, drv)}')
-		session_name = run_session(materials.config, src, drv, materials.pipeline, materials.label)
-		session_names.append(session_name)
-	
-	### evaluation
-	eval_exp(materials, session_names)
-	
-	setattr(materials, 'result', types.SimpleNamespace())
-	materials.result.session_names = session_names
-	# setattr(materials.result, 'session_names', session_names)
+	if len(materials.config.dynamic.load_exp) == 0:
+		materials.logger.info('running exp...')
+		session_names = []
+		for src, drv in tqdm(materials.test_samples):
+			print(f'running session: {(src, drv)}')
+			session_name = run_session(materials.config, src, drv, materials.pipeline, materials.label)
+			session_names.append(session_name)
+		materials.logger.info('finished exp')
+		setattr(materials, 'session_names', session_names)
+  
+		if not materials.config.dynamic.skip_eval:
+			### evaluation
+			materials.logger.info('running evaluation...')
+			eval_exp(materials)
+			materials.logger.info('finished evaluation')
+		
+		# setattr(materials, 'result', types.SimpleNamespace())
+  
+		# setattr(materials.result, 'session_names', session_names)
 
-	del materials.metric
-	del materials.pipeline
+		del materials.metric
+		del materials.pipeline
+		del materials.logger
+	
+		torch.save(materials, os.path.join(materials.cwd, 'materials.pt'))
+  
+	else:
+		materials.logger.info('loading exp...')
+		session_names = materials.loaded_materials
+		print(f'check: {materials.loaded_materials.metric}')
+  
+		### evaluation
+		materials.logger.info('running evaluation...')
+		eval_exp(materials.loaded_materials)
+		materials.logger.info('finished evaluation')
+	
+		# setattr(materials, 'result', types.SimpleNamespace())
+		# materials.result.session_names = session_names
+		# setattr(materials.result, 'session_names', session_names)
 
-	torch.save(materials, os.path.join(materials.cwd, 'materials.pt'))
+		# del materials.metric
+		# del materials.pipeline
+		# del materials.logger
+	
+		# torch.save(materials, os.path.join(materials.cwd, 'materials.pt'))
+
 
 def construct_test_samples(config, cwd=None):
 	samples = []
 	inputs = config.dynamic.inputs
-	data_dir = config.env.proc_path if config.dynamic.processed_inputs else config.env.raw_path
+	data_dir = config.env.proc_path if not config.dynamic.preprocess else config.env.raw_path
 
 	if config.dynamic.input_as_file:
 		for input_key, input_file in list(vars(inputs).items()):
@@ -245,13 +316,17 @@ def construct_test_samples(config, cwd=None):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--config', type=str, required=True) 
+ 
 	args, unparsed  = parser.parse_known_args()
 
 	config_path = args.config
 
 	config = read_config(config_path)
+
 	print(f'running with config: {config}')
  
 	materials = setup_exp(args, config)
+	
+	materials.logger.info('exp setup finished')
  
 	run_exp(materials)

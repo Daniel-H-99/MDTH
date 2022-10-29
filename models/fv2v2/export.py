@@ -113,8 +113,8 @@ def extract_landmark_from_img(output_dir, he_estimator, landmark_model, rewrite=
     path = os.path.join(output_dir, 'image.png')
     output_name = path.split('/')[-1].split('.jpg')[0].split('.png')[0]
     output_file_path = os.path.join(output_dir, '3d_landmarks.pt')
-    if os.path.exists(output_file_path) and not rewrite:
-        return
+    # if os.path.exists(output_file_path) and not rewrite:
+    #     return
     im = imageio.imread(path)
     im = im[:, :, :3]
     H, W = im.shape[:2]
@@ -134,7 +134,7 @@ def extract_landmark_from_img(output_dir, he_estimator, landmark_model, rewrite=
     landmark_item = {'2d_landmarks':torch.from_numpy(coords), '3d_landmarks_pose': torch.from_numpy(coords_3d), '3d_landmarks': torch.from_numpy(vertices), 'p': a, 'normed_right_iris': torch.from_numpy(normed_right_iris), 'normed_left_iris': torch.from_numpy(normed_left_iris)}
 
     with torch.no_grad():
-        he = he_estimator(torch.tensor(im).to(landmark_model.gpu[0]).permute(2, 0, 1)[None, [2, 1, 0]] / 255) # {R, t, ...}
+        he = he_estimator(torch.tensor(im).to(landmark_model.gpu[0]).permute(2, 0, 1)[None, [2, 1, 0]] / 255.0) # {R, t, ...}
     R, t = he['R'][0], he['t'][0]
 
     landmark_item['he_p'] = {'R': he['R'][0].detach().cpu().numpy(), 't': he['t'][0].detach().cpu().numpy()}
@@ -146,10 +146,10 @@ def extract_landmark_from_img(output_dir, he_estimator, landmark_model, rewrite=
     return 
 
 def extract_landmark_from_video(target, he_estimator, landmark_model, rewrite=False):
-    resource = os.path.join(target, 'video.mp4')
+    resource = os.path.join(target, 'frames')
     output_file_path = os.path.join(target, '3d_landmarks.pt')
-    if os.path.exists(output_file_path) and not rewrite:
-        return False
+    # if os.path.exists(output_file_path) and not rewrite:
+    #     return False
     if not os.path.exists(target):
         os.mkdir(target)
 
@@ -164,75 +164,82 @@ def extract_landmark_from_video(target, he_estimator, landmark_model, rewrite=Fa
     landmarks  = []
     nonDetectFr = []
 
-    cap = cv2.VideoCapture(resource)  # load video
-    # video info
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    totalFrame = np.int32(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-            int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-    print("Total frames: ", totalFrame)
-    print("Frame size: ", size)
-    print("fps: ", fps)
-    vis = 0
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v') # create VideoWriter object
+
+    frame_names = os.listdir(resource)
+    video = []
+    fids = []
+    for frame_name in frame_names:
+        frame = imageio.imread(os.path.join(resource, frame_name))
+        video.append(frame)
+        fid = int(frame_name.split('.png')[0])
+        fids.append(fid)
+    order = torch.tensor(fids).argsort()
+    video = torch.tensor(np.array([resize(img_as_ubyte(frame), (256, 256))[..., :3] for frame in video]))[order]
+    fps = 25
+    
+    
+    # cap = cv2.VideoCapture(resource)  # load video
+    # # video info
+    # fps = cap.get(cv2.CAP_PROP_FPS)
+    # totalFrame = np.int32(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+    #         int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+    # print("Total frames: ", totalFrame)
+    # print("Frame size: ", size)
+    # print("fps: ", fps)
+    # vis = 0
+    # fourcc = cv2.VideoWriter_fourcc(*'mp4v') # create VideoWriter object
     # width, height = 256, 256
     totalIndx = 0
 
     d = 0
-    while(cap.isOpened()):
-        frameIndex = np.int32(cap.get(cv2.CAP_PROP_POS_FRAMES))
-        print("Processing frame ", frameIndex, "...")
-        # capture frame-by-frame
-        ret, frame = cap.read()
-        if ret==True:
-            # operations on the frame
-            try:
-                # generate face bounding box and track 2D landmarks for current frame
-                frame = frame[:, :, :3]
-                height, width = frame.shape[:2]
-                (bb, frame_landmarks) = landmark_model.get_landmarks_fa(frame)
-            except:
-                print("Landmarks in frame ", frameIndex, " (", frameIndex/fps, " s) could not be detected.")
-                nonDetectFr.append(frameIndex/fps)
-                continue
+    for frameIndex, frame in enumerate(video):
+        print(f'frameIndex: {frameIndex}')
+        # operations on the frame
+        try:
+            # generate face bounding box and track 2D landmarks for current frame
+            frame = frame[:, :, :3]
+            height, width = frame.shape[:2]
+            (bb, frame_landmarks) = landmark_model.get_landmarks_fa(frame)
+        except:
+            print("Landmarks in frame ", frameIndex, " (", frameIndex/fps, " s) could not be detected.")
+            continue
 
-            if he_estimator is not None:
-                with torch.no_grad():
-                    he = he_estimator(torch.tensor(frame).to(landmark_model.gpu[0]).permute(2, 0, 1)[None, [2, 1, 0]] / 255) # {R, t, ...}
-                R, t = he['R'][0], he['t'][0]
+        if he_estimator is not None:
+            with torch.no_grad():
+                he = he_estimator((torch.tensor(frame).to(landmark_model.gpu[0]).permute(2, 0, 1)[None, [2, 1, 0]] / 255).float()) # {R, t, ...}
+            R, t = he['R'][0], he['t'][0]
 
-            vertices, a, Ind = landmark_model.normalize_mesh(frame_landmarks, height, width)
+        vertices, a, Ind = landmark_model.normalize_mesh(frame_landmarks, height, width)
 
-            coords_3d = np.concatenate([vertices, np.ones((len(vertices), 1))], axis=1) @ a['U']
+        coords_3d = np.concatenate([vertices, np.ones((len(vertices), 1))], axis=1) @ a['U']
 
-            normalizer = a['normalizer']
-            mesh_mp = extract_mesh(img_as_ubyte(frame))
-            right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
-            left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
-            # print(f'right_iris shape: {right_iris.shape}')
-            normed_right_iris = normalizer(right_iris[None].numpy().astype(np.float32))
-            normed_left_iris = normalizer(left_iris[None].numpy().astype(np.float32))
+        normalizer = a['normalizer']
+        mesh_mp = extract_mesh(img_as_ubyte(frame))
+        right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
+        left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
+        # print(f'right_iris shape: {right_iris.shape}')
+        normed_right_iris = normalizer(right_iris[None].numpy().astype(np.float32))
+        normed_left_iris = normalizer(left_iris[None].numpy().astype(np.float32))
 
-            del a['normalizer']
-            
-            landmark_item = {
-                '2d_landmarks': torch.from_numpy(frame_landmarks),
-                '3d_landmarks_pose': torch.from_numpy(coords_3d),
-                '3d_landmarks': torch.from_numpy(vertices),
-                'p': a,
-                'normed_right_iris': torch.from_numpy(normed_right_iris),
-                'normed_left_iris': torch.from_numpy(normed_left_iris)
-            }
+        del a['normalizer']
+        
+        landmark_item = {
+            '2d_landmarks': torch.from_numpy(frame_landmarks),
+            '3d_landmarks_pose': torch.from_numpy(coords_3d),
+            '3d_landmarks': torch.from_numpy(vertices),
+            'p': a,
+            'normed_right_iris': torch.from_numpy(normed_right_iris),
+            'normed_left_iris': torch.from_numpy(normed_left_iris)
+        }
 
-            if he_estimator is not None:
-                landmark_item['he_p'] = {'R': he['R'][0].detach().cpu().numpy(), 't': he['t'][0].detach().cpu().numpy()}
+        if he_estimator is not None:
+            landmark_item['he_p'] = {'R': he['R'][0].detach().cpu().numpy(), 't': he['t'][0].detach().cpu().numpy()}
 
-            landmarks.append(landmark_item)
+        landmarks.append(landmark_item)
 
-            totalIndx = totalIndx + 1
+        totalIndx = totalIndx + 1
 
-        else:
-            break
 
     torch.save(landmarks, output_file_path)
     
@@ -604,7 +611,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     frame_shape = config['dataset_params']['frame_shape']
 
     if opt.source_dir.endswith('.mp4'):
-        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '00000.png'))
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '0000000.png'))
     else:
         source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
@@ -621,6 +628,9 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     target_meshes = []
 
     source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
+    if type(source_landmarks) == list:
+        print(f'length: {len(source_landmarks)}')
+        source_landmarks = source_landmarks[0]
     source_mesh = {}
     source_mesh['value'] = source_landmarks['3d_landmarks'].float() / SCALE
     right_iris = source_landmarks['normed_right_iris'].float() / SCALE
@@ -790,6 +800,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         mesh['raw_value'] = torch.tensor(source_landmarks['3d_landmarks_pose'])
 
         if relative_headpose:
+            
             ### manipulate head pose ###
             driving_pose = driving_landmarks[driven_pose_index]['he_p']
 

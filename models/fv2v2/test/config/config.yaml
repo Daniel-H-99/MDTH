@@ -18,10 +18,10 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2/00000169-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2/00000170-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_stage2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2/00000169-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2/00000170-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_stage2/mesh_img_fc_stage2.yaml'                    
         attr:
             fps: 25
@@ -52,18 +52,23 @@ config:
             dir: '@res_path'
 dynamic:
     gpus: [0]
-    mode: 'pair'
+    mode: 'combination'
     input_as_file: True
     inputs:
-        pair: 'inputs/vox_eval_small.txt'
-    label: 'mesh_img_fc_stage2_169_vox_small'
+        source: 'inputs/source.txt'
+        driving: 'inputs/driving_tmp.txt'
+    label: 'ours_tmp'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
-    relative_headpose: False
+    save_frames: False
     stage: 2
-    save_frames: True
-    processed_inputs: True
+    relative_headpose: False
+    extract_landmarks: False
+    preprocess: False
+    skip_eval: True
+    load_exp: ''
+
     
     
 

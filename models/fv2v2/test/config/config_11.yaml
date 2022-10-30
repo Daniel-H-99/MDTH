@@ -18,10 +18,10 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/c00000001-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/00000011-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/c00000001-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/00000011-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/mesh_img_fc_stage2.yaml'                   
         attr:
             fps: 25
@@ -57,7 +57,7 @@ dynamic:
     inputs:
         source: 'inputs/source.txt'
         driving: 'inputs/driving_tmp.txt'
-    label: 'ours_tmp_01'
+    label: 'ours_tmp_11'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

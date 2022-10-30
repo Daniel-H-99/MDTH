@@ -1,1 +1,7 @@
 mead_samples/emotion_faces/ang_001.png
+celeb/W_00002_cropped.png
+celeb/W_00006_cropped.png
+celeb_wild/00000.png
+celeb_wild/00004.png
+celeb_wild/00012.png
+voxceleb_img/00000.jpg

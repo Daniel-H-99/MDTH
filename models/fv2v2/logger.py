@@ -49,7 +49,7 @@ class Logger:
 
     @staticmethod
     def load_cpk(checkpoint_path, generator=None, discriminator=None, kp_detector=None, he_estimator=None, exp_transformer=None, hie_estimator=None,
-                 optimizer_generator=None, optimizer_discriminator=None, optimizer_kp_detector=None, optimizer_he_estimator=None, optimizer_hie_estimator=None, optimizer_exp_transformer=None):
+                 optimizer_generator=None, optimizer_discriminator=None, optimizer_kp_detector=None, optimizer_he_estimator=None, optimizer_hie_estimator=None, optimizer_exp_transformer=None, delta=False):
         checkpoint = torch.load(checkpoint_path)
         if generator is not None:
             # _state = generator.state_dict()
@@ -71,12 +71,20 @@ class Logger:
         
         
         if exp_transformer is not None:
-            _state = exp_transformer.state_dict()
-            # for k, v in checkpoint['exp_transformer'].items():
-            #     if 'delta' not in k:
-            #         _state[k] = v
-            _state = checkpoint['exp_transformer']
-            # _state.update(checkpoint['exp_transformer'])
+            if not delta:
+                _state = exp_transformer.state_dict()
+                for k, v in checkpoint['exp_transformer'].items():
+                    if 'delta' not in k:
+                        _state[k] = v
+                # _state = checkpoint['exp_transformer']
+                # _state.update(checkpoint['exp_transformer'])
+            else:
+                _state = exp_transformer.state_dict()
+                for k, v in checkpoint['exp_transformer'].items():
+                    if 'delta' in k:
+                        _state[k] = v
+                # _state = checkpoint['exp_transformer']
+                # _state.update(checkpoint['exp_transformer'])
             exp_transformer.load_state_dict(_state)
         if hie_estimator is not None:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])

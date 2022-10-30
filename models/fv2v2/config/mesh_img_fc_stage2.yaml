@@ -76,7 +76,7 @@ train_params:
   gan_mode: 'hinge'    # hinge or ls
   batch_size: 4
   scales: [1, 0.5, 0.25, 0.125]
-  checkpoint_freq: 10
+  checkpoint_freq: 1
   hopenet_snapshot: 'hopenet_robust_alpha1.pkl'
   transform_params:
     sigma_affine: 0.05

@@ -137,7 +137,7 @@ def extract_landmark_from_img(output_dir, he_estimator, landmark_model, rewrite=
         he = he_estimator(torch.tensor(im).to(landmark_model.gpu[0]).permute(2, 0, 1)[None, [2, 1, 0]] / 255.0) # {R, t, ...}
     R, t = he['R'][0], he['t'][0]
 
-    landmark_item['he_p'] = {'R': he['R'][0].detach().cpu().numpy(), 't': he['t'][0].detach().cpu().numpy()}
+    landmark_item['he_p'] = {'R': he['R'][0].detach().cpu().numpy(), 't': -he['t'][0].detach().cpu().numpy()}
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
@@ -467,6 +467,7 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    tmp[:, :, 2] = tmp[:, :, 2] / 5
     kp_transformed = tmp # B x N x 3
 
 
@@ -647,7 +648,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     source_mesh['U'] = pose_p['U']
     source_mesh['scale'] = SCALE
     source_mesh['he_R'] = source_landmarks['he_p']['R']
-    source_mesh['he_t'] = source_landmarks['he_p']['t']
+    source_mesh['he_t'] = -source_landmarks['he_p']['t']
 
     ### calc bias ###
     s = np.linalg.norm((source_mesh['raw_value'][45] - source_mesh['raw_value'][36]) / SCALE) / np.linalg.norm(source_mesh['value'][45] - source_mesh['value'][36])

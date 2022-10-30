@@ -1,1 +1,1 @@
-mead_samples/emotion_faces/ang_001.png
+celeb_wild/00013.png

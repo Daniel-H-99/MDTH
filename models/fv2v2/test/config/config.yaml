@@ -55,15 +55,15 @@ dynamic:
     mode: 'combination'
     input_as_file: True
     inputs:
-        source: 'inputs/source.txt'
+        source: 'inputs/source_tmp.txt'
         driving: 'inputs/driving_tmp.txt'
-    label: 'ours_tmp'
+    label: 'ours_170_tmp'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
     save_frames: False
     stage: 2
-    relative_headpose: False
+    relative_headpose: True
     extract_landmarks: False
     preprocess: False
     skip_eval: True

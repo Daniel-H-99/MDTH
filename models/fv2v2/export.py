@@ -292,10 +292,10 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
     return adapted_values
 
 def filter_values(values):
-    MIN_CUTOFF = 1.0
-    BETA = 1.0
+    MIN_CUTOFF = 1
+    BETA = 1
     num_frames = len(values)
-    fps = 30
+    fps = 25
     times = np.linspace(0, num_frames / fps, num_frames)
     
     filtered_values= []
@@ -325,8 +325,10 @@ def filter_mesh(meshes, source_mesh, SCALE):
     t_zs = []
     
     ts = []
+    Rs = []
     for i, mesh in enumerate(meshes):
         he_R, t = mesh['R'], mesh['t']
+        Rs.append(he_R)
         ts.append(t)
         R_x, R_y, R_z = matrix2euler(he_R)
         t_x, t_y, t_z = t
@@ -343,37 +345,48 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
-    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
+    # R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    R_xs_adapted = R_xs
+    R_ys_adapted = R_ys
+    R_zs_adapted = R_zs
     
     R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy())).float()
     R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy())).float()
     R_zs_filtered = torch.tensor(filter_values(R_zs_adapted.numpy())).float()
+    # R_xs_filtered = R_xs_adapted
+    # R_ys_filtered = R_ys_adapted
+    # R_zs_filtered = R_zs_adapted
     
     new_Rs = []
 
     for R_x, R_y, R_z in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered):
         new_R = torch.tensor(euler2matrix([R_x, R_y, R_z])).float()
         new_Rs.append(new_R)
-
-    new_Rs = torch.stack(new_Rs, dim=0).numpy()
-    ts = np.stack(ts, axis=0)
-    final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (-source_mesh['s'] * new_Rs @ source_mesh['b'] + ts[:, :, np.newaxis] + 1)], axis=2).transpose(0, 2, 1)).float()
-    t_xs = final_Us[:, 3, 0]
-    t_ys = final_Us[:, 3, 1]
-    t_zs = final_Us[:, 3, 2]
+    
+    # new_Rs = torch.stack(new_Rs, dim=0).numpy()
+    # ts = np.stack(ts, axis=0)
+    # final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (-source_mesh['s'] * new_Rs @ source_mesh['b'] + ts[:, :, np.newaxis] + 1)], axis=2).transpose(0, 2, 1)).float()
+    # t_xs = final_Us[:, 3, 0]
+    # t_ys = final_Us[:, 3, 1]
+    # t_zs = final_Us[:, 3, 2]
 
     t_x_source, t_y_source, t_z_source = source_mesh['t']
 
-    t_xs_adapted = adapt_values(t_x_source, t_xs, minimum=32, maximum=224, center_align=True)
-    t_ys_adapted = adapt_values(t_y_source, t_ys, minimum=32, maximum=224, center_align=True)
-    t_zs_adapted = adapt_values(t_z_source, t_zs, center_align=True)
-    
+    # t_xs_adapted = adapt_values(t_x_source, t_xs, minimum=32, maximum=224, center_align=True)
+    # t_ys_adapted = adapt_values(t_y_source, t_ys, minimum=32, maximum=224, center_align=True)
+    # t_zs_adapted = adapt_values(t_z_source, t_zs, center_align=True)
+    t_xs_adapted = torch.tensor(t_xs)
+    t_ys_adapted = torch.tensor(t_ys)
+    t_zs_adapted = torch.tensor(t_zs)
     
     t_xs_filtered = torch.tensor(filter_values(t_xs_adapted.numpy())).float()
     t_ys_filtered = torch.tensor(filter_values(t_ys_adapted.numpy())).float()
     t_zs_filtered = torch.tensor(filter_values(t_zs_adapted.numpy())).float()
+    # t_xs_filtered = t_xs_adapted
+    # t_ys_filtered = t_ys_adapted
+    # t_zs_filtered = t_zs_adapted
     
     for R_x, R_y, R_z, t_x, t_y, t_z, mesh in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered, t_xs_filtered, t_ys_filtered, t_zs_filtered, meshes):
         new_R = torch.tensor(euler2matrix([R_x, R_y, R_z])).float()
@@ -390,7 +403,12 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
         trans_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
         
-        final_U = rot_src.T @ source_mesh['proj'].T @ trans_src.T
+        final_U = rot_src.T @ source_mesh['proj'].T @ mesh['viewport'].T
+        final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
+        # print(f'drv proj: {source_mesh["proj"]}')
+        # print(f'drv proj: {meshes[0]["proj"]}')
+        # while True:
+        #     continue
         mesh['U'] = torch.tensor(final_U).float()
 
 def get_mesh_image_section(mesh, frame_shape, section_indices, sections_indices_splitted):
@@ -467,7 +485,7 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    tmp[:, :, 2] = tmp[:, :, 2] / 5
+    tmp[:, :, 2] = tmp[:, :, 2] / 10
     kp_transformed = tmp # B x N x 3
 
 
@@ -816,10 +834,13 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             delta_angle = np.array([angle_x, angle_y, angle_z])
             delta_r = R.from_rotvec(delta_angle)
             final_r = delta_r.as_matrix() @ r.as_matrix()
-
+        
             # use driving R
-            final_r = driving_pose['R']
-            rot_src[:3, :3] = final_r
+            # final_r = driving_pose['R']
+            # rot_src[:3, :3] = final_r
+            
+            final_r = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, :3]
+            
             mesh['R'] = final_r
 
             trans_x = 0
@@ -828,9 +849,14 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             final_trans = np.array([trans_x, trans_y, trans_z])
 
             # use driving trans
-            final_trans = driving_pose['t'][:3]
+            # final_trans = driving_pose['t'][:3]
+            
+            final_trans = driving_landmarks[driven_pose_index]['p']['U'].copy()[3, :3]
+            # print(f'pose_idx: {driven_pose_index}')
+            # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
             mesh['t'] = final_trans
-            mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj']
+            mesh['viewport'] = driving_landmarks[driven_pose_index]['p']['viewport'].copy()
+            mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj'].copy()
         else:
             mesh['U'] = driving_Us[i]
             

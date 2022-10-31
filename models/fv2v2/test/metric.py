@@ -27,8 +27,9 @@ import os
 import sys
 root_dir = str(pathlib.Path(__file__).parent / '..')
 sys.path.insert(0, root_dir)
-from modules.landmark_model import LandmarkModel
-# from pipelines.landmark_model import LandmarkModel
+
+from pipelines.landmark_model import LandmarkModel
+from facenet_pytorch import InceptionResnetV1
 
 
 
@@ -55,6 +56,8 @@ class MetricEvaluater():
         self.dataset = DATASET
         self.dataloader = DataLoader
         self.landmark_model = LandmarkModel(config.config.common.checkpoints.landmark_model.dir) if landmark_model is None else landmark_model
+        self.inception = InceptionResnetV1(pretrained='vggface2').eval().to('cuda:0')
+        self.cache = {}
         
     def get_dataloader(self, path, **kwargs):
         dataset = self.dataset(path)
@@ -64,25 +67,34 @@ class MetricEvaluater():
         # x, y: image directory
         files_x = os.listdir(x)
         files_y = os.listdir(y)
+        fids_x = list(map(lambda x: int(x.split('.')[0]), files_x))
+        fids_y = list(map(lambda x: int(x.split('.')[0]), files_y))
+        dict_y = {k: v for (k, v) in zip(fids_y, files_y)}
         # print(f'files_x: {files_x}')
         # print(f'files_y: {files_y}')
         # while True:
         #     continue
+        print(f'x: {x}')
         pairs = []
-        for file in files_x:
-            if file in files_y:
-                path_x = os.path.join(x, file)
-                path_y = os.path.join(y, file)
+        for fid_x, file_x in zip(fids_x, files_x):
+            if fid_x in dict_y:
+                file_y = dict_y[fid_x]
+                path_x = os.path.join(x, file_x)
+                path_y = os.path.join(y, file_y)
                 frame_x = img_as_float32(imread(path_x))
                 frame_y = img_as_float32(imread(path_y))
                 pairs.append([frame_x, frame_y])
                 
+        print(f'len frames: {len(pairs)}')
         pairs = torch.tensor(np.array(pairs)).permute(0, 1, 4, 2, 3)
         
         return pairs
     
     def get_frames(self, x):
         # x, y: image directory
+        if x in self.cache:
+            return self.cache[x]
+        
         files_x = os.listdir(x)
 
         frames = []
@@ -93,13 +105,16 @@ class MetricEvaluater():
             frames.append(frame_x)
         
         frames = torch.tensor(np.array(frames)).permute(0, 3, 1, 2)
+        self.cache[x] = frames
         
         return frames
     
     def get_frame(self, path):
+        if path in self.cache:
+            return self.cache[path]
         frame = img_as_float32(imread(path))
         frame = torch.tensor(frame).unsqueeze(0).permute(0, 3, 1, 2)
-        
+        self.cache[path] = frame
         return frame
     
     def L1(self, x, y, is_path=True):
@@ -160,7 +175,6 @@ class MetricEvaluater():
             pairs = self.get_paired_frames(x, y)
             x = pairs[:, 0]
             y = pairs[:, 1]
-            
         bs = len(x)
         lm_x = self.landmark_model.get_landmarks_batch(x).reshape((bs, -1, 2))
         lm_y = self.landmark_model.get_landmarks_batch(y).reshape((bs, -1, 2))
@@ -181,6 +195,21 @@ class MetricEvaluater():
     def calc_dist_similarity(self, x, y, is_path=True):
         pass
     
+    def AED(self, x, y, is_path=True):
+        if is_path:
+            x = self.get_frames(x)[[0]].to('cuda:0')
+            y = self.get_frames(y).to('cuda:0')
+            
+        bs = len(x)
+        
+        feat_x = self.inception(x)
+        feat_y = self.inception(y)
+        
+        feat_x = feat_x.repeat(len(feat_y), 1, 1, 1)
+        
+        res = torch.norm(feat_x - feat_y, dim=-1).mean().detach().cpu()
+        return res
+
     def CSIM(self, x, y, is_path):
         # x, y: B x C x H x W
         if is_path:

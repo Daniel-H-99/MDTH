@@ -105,7 +105,7 @@ class THPipeline():
         os.makedirs(frames_dir)
         ## leave inputs (src_path, drv_path) as inputs.txt
         inputs = [src_path, drv_path]
-        np.savetxt(os.path.join(output_path, 'inputs.txt'), inputs, fmt='%s')
+        np.savetxt(os.path.join(output_path, 'inputs.txt'), inputs, fmt='%s', comments=None)
         # with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
         #     f.writelines([src_path+'\r\n', drv_path+'\r\n'])
             

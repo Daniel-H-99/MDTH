@@ -36,6 +36,7 @@ METRIC_META = {
     'MS-SSIM': MetricItem('MS-SSIM', 'MS_SSIM', 'frames'),
     'AKD': MetricItem('AKD', 'AKD', 'frames'),
     'PSNR': MetricItem('PSNR', 'PSNR', 'frames'),
+    'AED': MetricItem('AED', 'AED', 'frames'),
 }
 
 class AttrDict(dict):
@@ -90,27 +91,28 @@ def setup_exp(args, config):
 		materials['test_samples'] = test_samples
 		materials['metric'] = MetricEvaluater(config)
 		materials['metric_names'] = {
-		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR']
+		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR'],
+		'cross_identity': ['AED']
 		}
 		materials['logger'] = make_logger(cwd)
+		materials = AttrDict.from_nested_dicts(materials)
 
 	else:
 		loaded_materials = torch.load(config.dynamic.load_exp)
-		setattr(loaded_materials, 'metric', MetricEvaluater(loaded_materials.config))
-		setattr(loaded_materials, 'metric_names', {
-		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR']
-		})
-		print(f'check 0: {loaded_materials.metric}')
-		materials['loaded_materials'] = loaded_materials
+
 		materials['config'] = config
 		materials['logger'] = make_logger(loaded_materials.cwd)
-
-	# materials['logger'] = logger
- 
-	materials = AttrDict.from_nested_dicts(materials)
+		materials = AttrDict.from_nested_dicts(materials)
+		
+		setattr(loaded_materials, 'metric', MetricEvaluater(loaded_materials.config))
+		setattr(loaded_materials, 'metric_names', AttrDict.from_nested_dicts({
+		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR'],
+		'cross_identity': ['AED']
+		}))
+  
+		setattr(materials, 'loaded_materials', loaded_materials)
 	
 	return materials
-
 def make_logger(cwd):
 	# 로그 생성
 	logger = logging.getLogger()
@@ -169,7 +171,7 @@ def eval_iter_sessions(func, materials, session_names, post_fix=''):
 	session_dirs = list(map(lambda x: os.path.join(materials.cwd, x), session_names))
 
 	for session_name, session_dir in zip(session_names, session_dirs):
-		inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'), dtype=str, comments='#')
+		inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'), dtype=str, comments=None)
 		print(f'inputs: {inputs}')
 		source, driving = inputs
 		# with open(os.path.join(session_dir, 'inputs.txt'), 'r') as f:
@@ -298,7 +300,7 @@ def construct_test_samples(config, cwd=None):
 			if '*' in drv:
 				drv = glob.glob(os.path.join(data_dir, drv))
 				drv = list(map(lambda x: os.path.relpath(x, start=data_dir), drv))
-			assert (type(src) == list) * (type(drv) == list), 'src, drv pairs are not matched!'
+			# assert (type(src) == list) * (type(drv) == list), 'src, drv pairs are not matched!'/
 			if type(src) == list:
 				for src_item, drv_item in zip(src, drv):
 					samples.append((src_item, drv_item))

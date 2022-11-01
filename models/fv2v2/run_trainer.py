@@ -71,13 +71,15 @@ if __name__ == "__main__":
     if opt.verbose:
         print(generator)
 
-    discriminator = MultiScaleDiscriminator(**config['model_params']['discriminator_params'],
-                                            **config['model_params']['common_params'])
-    if torch.cuda.is_available():
-        discriminator.to(opt.device_ids[0])
-    if opt.verbose:
-        print(discriminator)
+    # discriminator = MultiScaleDiscriminator(**config['model_params']['discriminator_params'],
+    #                                         **config['model_params']['common_params'])
+    # if torch.cuda.is_available():
+    #     discriminator.to(opt.device_ids[0])
+    # if opt.verbose:
+    #     print(discriminator)
 
+    discriminator = None
+    
     # kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
     #                            **config['model_params']['common_params'])
     # if torch.cuda.is_available():
@@ -86,11 +88,12 @@ if __name__ == "__main__":
     # if opt.verbose:
     #     print(kp_detector)
 
-    he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
-                               **config['model_params']['common_params'])
+    # he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
+    #                            **config['model_params']['common_params'])
 
-    if torch.cuda.is_available():
-        he_estimator.to(opt.device_ids[0])
+    # if torch.cuda.is_available():
+    #     he_estimator.to(opt.device_ids[0])
+    he_estimator = None
 
 
     exp_transformer = ExpTransformer(**config['model_params']['exp_transformer_params'],

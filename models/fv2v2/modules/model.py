@@ -944,7 +944,7 @@ class GeneratorFullModelWithSeg(torch.nn.Module):
         self.he_estimator_ref = he_estimator_ref
         self.train_params = train_params
         self.scales = train_params['scales']
-        self.disc_scales = self.discriminator.scales
+        # self.disc_scales = self.discriminator.scales
         self.pyramid = ImagePyramide(self.scales, generator.image_channel)
         self.pyramid_cond = ImagePyramide(self.scales, generator.image_channel + 1)
         if torch.cuda.is_available():
@@ -1261,13 +1261,13 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         
         exp_transformer.train()
         
-        discriminator.train()
-        for p in discriminator.parameters():
-            p.requires_grad = True
+        # discriminator.train()
+        # for p in discriminator.parameters():
+        #     p.requires_grad = True
 
-        generator.train()
-        for p in generator.parameters():
-            p.requires_grad = True
+        # generator.train()
+        # for p in generator.parameters():
+        #     p.requires_grad = True
 
         self.stage = stage
 
@@ -1541,8 +1541,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
-            src_feat = self.he_estimator(x['source'])['out']        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            drv_feat = self.he_estimator(x['driving'])['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # src_feat = self.he_estimator(x['source'])['out']        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # drv_feat = self.he_estimator(x['driving'])['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']

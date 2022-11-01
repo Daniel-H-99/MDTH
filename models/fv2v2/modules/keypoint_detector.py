@@ -249,6 +249,7 @@ class ExpTransformer(nn.Module):
     def encode(self, x, placeholder=['kp', 'delta']):
         output = {}
         if 'kp' in placeholder:
+            print(f'x mesh shape: {x["mesh"].shape}')
             id_embedding = self.id_encoder(x['mesh'])
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
             output['kp'] = id_embedding

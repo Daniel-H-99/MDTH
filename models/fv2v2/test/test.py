@@ -91,7 +91,7 @@ def setup_exp(args, config):
 		materials['test_samples'] = test_samples
 		materials['metric'] = MetricEvaluater(config)
 		materials['metric_names'] = {
-		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR'],
+		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR', 'AED'],
 		'cross_identity': ['AED']
 		}
 		materials['logger'] = make_logger(cwd)
@@ -106,15 +106,15 @@ def setup_exp(args, config):
 		
 		setattr(loaded_materials, 'metric', MetricEvaluater(loaded_materials.config))
 		setattr(loaded_materials, 'metric_names', AttrDict.from_nested_dicts({
-		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR'],
+		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR', 'AED'],
 		'cross_identity': ['AED']
 		}))
   
 		setattr(materials, 'loaded_materials', loaded_materials)
 	
 	return materials
+
 def make_logger(cwd):
-	# 로그 생성
 	logger = logging.getLogger()
 
 	# 로그의 출력 기준 설정

@@ -197,17 +197,26 @@ class MetricEvaluater():
     
     def AED(self, x, y, is_path=True):
         if is_path:
-            x = self.get_frames(x)[[0]].to('cuda:0')
-            y = self.get_frames(y).to('cuda:0')
+            x = self.get_frames(x)[[0]]
+            y = self.get_frames(y)
             
-        bs = len(x)
+        bs = len(y)
+        chunk_length = min(32, bs)
         
-        feat_x = self.inception(x)
-        feat_y = self.inception(y)
-        
-        feat_x = feat_x.repeat(len(feat_y), 1, 1, 1)
-        
+        feat_x = self.inception(x.to('cuda:0')).detach().cpu()
+        # print(f'feat_x shape: {feat_x.shape}')
+        feat_y = []
+        for i in range(0, bs, chunk_length):
+            y_mini = y[i : i + chunk_length]
+            # print(f'y_mini shape: {y_mini.shape}')
+            feat_y_mini = self.inception(y_mini.to('cuda:0')).detach().cpu()
+            feat_y.append(feat_y_mini)
+            
+        feat_y = torch.cat(feat_y, dim=0)
+
+        feat_x = feat_x.repeat(len(feat_y), 1)
         res = torch.norm(feat_x - feat_y, dim=-1).mean().detach().cpu()
+        
         return res
 
     def CSIM(self, x, y, is_path):

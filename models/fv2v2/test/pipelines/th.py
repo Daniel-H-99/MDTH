@@ -63,6 +63,7 @@ class THPipeline():
                 os.makedirs(dest_path)
             self.landmark_model.preprocess_video(src_path, dest_file_path)
             
+        print(f'extract_landmarks: {extract_landmarks}')
         if extract_landmarks:
             rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
         else:

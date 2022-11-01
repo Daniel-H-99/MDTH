@@ -66,7 +66,7 @@ dynamic:
     extract_landmarks: True
     preprocess: False
     skip_eval: False
-    load_exp: ''
+    load_exp: '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/vox_eval_group_4_hetero_2022-10-31T15:00:15/materials.pt'
 
     
     

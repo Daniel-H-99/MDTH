@@ -55,8 +55,8 @@ dynamic:
     mode: 'pair'
     input_as_file: True
     inputs:
-        pair: 'inputs/vox_eval_group_0_hetero.txt'
-    label: 'vox_eval_group_0_hetero'
+        pair: 'inputs/mead_pair.txt'
+    label: 'ours_mead_homo'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

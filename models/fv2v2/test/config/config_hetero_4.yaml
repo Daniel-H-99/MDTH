@@ -63,10 +63,10 @@ dynamic:
     save_frames: True
     stage: 2
     relative_headpose: True
-    extract_landmarks: True
+    extract_landmarks: False
     preprocess: False
-    skip_eval: False
-    load_exp: ''
+    skip_eval: True
+    load_exp: '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/vox_eval_group_4_hetero_2022-10-31T15:00:15/materials.pt'
 
     
     

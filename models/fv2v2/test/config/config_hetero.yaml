@@ -18,11 +18,11 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/00000019-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/mesh_mesh_fc_stage2_v2_logloss0.yaml'         
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/00000057-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/00000019-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/mesh_mesh_fc_stage2_v2_logloss0.yaml'                   
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/00000057-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'         
         attr:
             fps: 25
     preprocess:
@@ -52,11 +52,12 @@ config:
             dir: '@res_path'
 dynamic:
     gpus: [0]
-    mode: 'pair'
+    mode: 'combination'
     input_as_file: True
     inputs:
-        pair: 'inputs/mead_pair.txt'
-    label: 'mesh_mesh_v2_logloss0_19_mead_homo'
+        source: 'inputs/source_tmp.txt'
+        driving: 'inputs/mead_small.txt'
+    label: 'mesh_mesh_v2_57_mead_hetero'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

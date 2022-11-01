@@ -229,19 +229,19 @@ class Visualizer:
             prediction = np.transpose(prediction, [0, 2, 3, 1])
             images.append((prediction, kp_driving))
         
-        if 'kp_driving_cycled' in out:
+        if 'kp_source_cycled' in out:
             # cycled source image (must be same be normal one)
-            cycled_driving = np.concatenate([driving[1:], driving[[0]]], axis=0)
-            cycled_kp_driving = np.concatenate([kp_driving[1:], kp_driving[[0]]], axis=0)
-            images.append((cycled_driving, cycled_kp_driving))
+            cycled_source = np.concatenate([source[1:], source[[0]]], axis=0)
+            cycled_kp_source = np.concatenate([kp_source[1:], kp_source[[0]]], axis=0)
+            images.append((cycled_source, cycled_kp_source))
             
             # cycyled driven image
-            kp_driving = out['kp_driving_cycled']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
+            kp_source_cycled= out['kp_source_cycled']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
             prediction = out['prediction_cycled'].data.cpu().numpy()
             prediction = np.transpose(prediction, [0, 2, 3, 1])
-            images.append((prediction, kp_driving))
-        if 'source_mesh_image' in out:
+            images.append((prediction, kp_source_cycled))
             
+        if 'source_mesh_image' in out:
             images.append(np.transpose(out['source_mesh_image'].repeat(1, 3, 1, 1).data.cpu().numpy(), [0,2,3,1]))
             images.append(np.transpose(out['driving_mesh_image'].repeat(1,3,1,1).data.cpu().numpy(), [0, 2, 3,1]))
         ## Occlusion map

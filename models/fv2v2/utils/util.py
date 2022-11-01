@@ -137,6 +137,7 @@ OPENFACE_NOSE_IDX = list(range(27, 36))
 
 OPENFACE_EYE_IDX = list(range(17, 27)) + list(range(36, 48))
 OPENFACE_LIP_IDX = list(range(48, 68))
+OPENFACE_ROI_IDX = OPENFACE_EYE_IDX + OPENFACE_LIP_IDX
 
 def create_dir(dir_name):
     if not os.path.exists(dir_name):

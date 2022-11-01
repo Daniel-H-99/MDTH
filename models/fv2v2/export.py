@@ -422,12 +422,12 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
-    # R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    # R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    R_xs_adapted = R_xs
-    R_ys_adapted = R_ys
-    R_zs_adapted = R_zs
+    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
+    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_xs_adapted = R_xs
+    # R_ys_adapted = R_ys
+    # R_zs_adapted = R_zs
     
     R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy())).float()
     R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy())).float()
@@ -614,7 +614,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
-            tf_output = exp_transformer({'feat': src_feat, 'mesh': _source_mesh['value']}, {'feat': drv_feat, 'mesh': _driving_mesh['value']})
+            tf_output = exp_transformer({'mesh': _source_mesh['value']}, {'mesh': _driving_mesh['value']})
 
             src_embedding = tf_output['src_embedding']
             drv_embedding = tf_output['drv_embedding']

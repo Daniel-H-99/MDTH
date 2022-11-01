@@ -9,6 +9,7 @@ from torch.autograd import grad
 import modules.hopenet as hopenet
 from torchvision import transforms
 from facenet_pytorch import InceptionResnetV1
+from utils.util import OPENFACE_ROI_IDX
 
 class Vgg19(torch.nn.Module):
     """
@@ -1549,7 +1550,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
-            tf_output = self.exp_transformer({'feat': src_feat, 'mesh': source_mesh['value']}, {'feat': drv_feat, 'mesh': driving_mesh['value']})
+            tf_output = self.exp_transformer({'mesh': source_mesh['value']}, {'mesh': driving_mesh['value']})
 
             kp_canonical = {'value': tf_output['src_kp']}
             kp_canonical_drv = {'value': tf_output['drv_kp']}
@@ -1632,7 +1633,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):
                     generated[f'{k}_cycled'] = v
-                generated['kp_driving_cycled'] = kp_source_cycled
+                generated['kp_source_cycled'] = kp_source_cycled
                 
 
             if self.loss_weights['log'] != 0:

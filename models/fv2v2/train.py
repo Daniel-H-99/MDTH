@@ -24,7 +24,9 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
     else: 
         delta_params = []
         for name, p in exp_transformer.named_parameters():
-            if 'delta_heads_post_scale' in name or 'delta_decoder' in name or 'delta_exp_code_decoder':
+            if 'delta' in name:
+            # if 'delta_heads_post_scale' in name or 'delta_decoder' in name or 'delta_exp_code_decoder' in name:
+                print(f'adding parameter: {name}')
                 delta_params.append(p)
         optimizer = torch.optim.Adam(delta_params, lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
         optimizer_generator = None
@@ -87,8 +89,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 losses_discriminator = discriminator_full(x, generated)
                 loss_values = [val.mean() for val in losses_discriminator.values()]
                 loss = sum(loss_values)
-
-            losses_generator.update(losses_discriminator)
+                losses_generator.update(losses_discriminator)
             losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
             logger.log_ground(losses=losses, inp=x, out=generated)
             del losses

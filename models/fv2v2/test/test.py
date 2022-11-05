@@ -22,10 +22,11 @@ import logging
 
 
 class MetricItem():
-    def __init__(self, name, func, post_fix=''):
+    def __init__(self, name, func, post_fix='', src_label=False):
         self.name = name
         self.func = func
         self.post_fix=post_fix
+        self.src_label = src_label
 
 
 METRIC_META = {
@@ -36,7 +37,8 @@ METRIC_META = {
     'MS-SSIM': MetricItem('MS-SSIM', 'MS_SSIM', 'frames'),
     'AKD': MetricItem('AKD', 'AKD', 'frames'),
     'PSNR': MetricItem('PSNR', 'PSNR', 'frames'),
-    'AED': MetricItem('AED', 'AED', 'frames'),
+    'AED': MetricItem('AED', 'AED', 'frames', True),
+    'AUCON': MetricItem('AUCON', 'AUCON', 'frames')
 }
 
 class AttrDict(dict):
@@ -92,7 +94,7 @@ def setup_exp(args, config):
 		materials['metric'] = MetricEvaluater(config)
 		materials['metric_names'] = {
 		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR', 'AED'],
-		'cross_identity': ['AED']
+		'cross_identity': ['AED', 'AUCON']
 		}
 		materials['logger'] = make_logger(cwd)
 		materials = AttrDict.from_nested_dicts(materials)
@@ -106,8 +108,8 @@ def setup_exp(args, config):
 		
 		setattr(loaded_materials, 'metric', MetricEvaluater(loaded_materials.config))
 		setattr(loaded_materials, 'metric_names', AttrDict.from_nested_dicts({
-		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR', 'AED'],
-		'cross_identity': ['AED']
+		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR'],
+		'cross_identity': ['AED', 'AUCON']
 		}))
   
 		setattr(materials, 'loaded_materials', loaded_materials)
@@ -115,6 +117,7 @@ def setup_exp(args, config):
 	return materials
 
 def make_logger(cwd):
+	# 로그 생성
 	logger = logging.getLogger()
 
 	# 로그의 출력 기준 설정
@@ -164,7 +167,7 @@ def write_scores(scores, materials):
 	# 	f.writelines(summary_string)
 
 
-def eval_iter_sessions(func, materials, session_names, post_fix=''):
+def eval_iter_sessions(func, materials, session_names, post_fix='', src_label=False):
 	scores = {}
 	print(f'cwd: {materials.cwd}')
 	print(f'session names: {session_names}')
@@ -179,9 +182,10 @@ def eval_iter_sessions(func, materials, session_names, post_fix=''):
 
 		# 	print(f'inputs: {inputs}')
    
-
+		label = source if src_label else driving
+  
 		result_path = os.path.join(session_dir, post_fix) if len(post_fix) > 0 else session_name
-		GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
+		GT_path = os.path.join(label, post_fix) if len(post_fix) > 0 else driving
   
 		score_session = func(result_path, GT_path).detach().cpu().numpy()
 		scores[session_name] = score_session
@@ -194,9 +198,11 @@ def eval_exp(materials):
 	scores = {}
  
 	### same identity evaluation
-	for metric_name in tqdm(materials.metric_names.same_identity):
+	metrics = getattr(materials.metric_names, 'cross_identity' if materials.config.dynamic.relative_headpose else 'same_identity')
+	# metrics = materials.metric_names.cross_identity
+	for metric_name in tqdm(metrics):
 		meta_info = METRIC_META[metric_name]
-		metric_score = eval_iter_sessions(getattr(metric, meta_info.func), materials, session_names, post_fix=meta_info.post_fix)
+		metric_score = eval_iter_sessions(getattr(metric, meta_info.func), materials, session_names, post_fix=meta_info.post_fix, src_label=meta_info.src_label)
 		scores[metric_name] = metric_score
   
 	write_scores(scores, materials)

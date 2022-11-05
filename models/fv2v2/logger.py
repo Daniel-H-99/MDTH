@@ -71,20 +71,22 @@ class Logger:
         
         
         if exp_transformer is not None:
-            if not delta:
-                _state = exp_transformer.state_dict()
-                for k, v in checkpoint['exp_transformer'].items():
-                    if 'delta' not in k:
-                        _state[k] = v
-                # _state = checkpoint['exp_transformer']
-                # _state.update(checkpoint['exp_transformer'])
-            else:
-                _state = exp_transformer.state_dict()
-                for k, v in checkpoint['exp_transformer'].items():
-                    if 'delta' in k:
-                        _state[k] = v
-                # _state = checkpoint['exp_transformer']
-                # _state.update(checkpoint['exp_transformer'])
+            # if not delta:
+            #     _state = exp_transformer.state_dict()
+            #     for k, v in checkpoint['exp_transformer'].items():
+            #         if 'delta' not in k:
+            #             _state[k] = v
+            #     # _state = checkpoint['exp_transformer']
+            #     # _state.update(checkpoint['exp_transformer'])
+            # else:
+            #     # _state = exp_transformer.state_dict()
+            #     # for k, v in checkpoint['exp_transformer'].items():
+            #     #     if 'delta' in k:
+            #     #         _state[k] = v
+            #     _state = checkpoint['exp_transformer']
+            #     # _state.update(checkpoint['exp_transformer'])
+            _state = checkpoint['exp_transformer']
+            
             exp_transformer.load_state_dict(_state)
         if hie_estimator is not None:
             hie_estimator.load_state_dict(checkpoint['hie_estimator'])

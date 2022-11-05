@@ -164,8 +164,10 @@ def extract_landmark_from_video(target, he_estimator, landmark_model, rewrite=Fa
     landmarks  = []
     nonDetectFr = []
 
-
+    print(f'resource: {resource}')
     frame_names = os.listdir(resource)
+    print(f'frame_names: {len(frame_names)}')
+    
     video = []
     fids = []
     for frame_name in frame_names:
@@ -291,9 +293,9 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
     
     return adapted_values
 
-def filter_values(values):
-    MIN_CUTOFF = 1
-    BETA = 1
+def filter_values(values, beta=0.1):
+    MIN_CUTOFF = beta
+    BETA = beta
     num_frames = len(values)
     fps = 25
     times = np.linspace(0, num_frames / fps, num_frames)
@@ -386,8 +388,7 @@ def filter_mesh_he(meshes, source_mesh, SCALE):
         r = R.from_matrix(rot_src[:3, :3])
 
         rot_src[:3, :3] = new_R.numpy().astype(np.float32)
-
-        trans_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
+        rot_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
         
         final_U = rot_src.T @ source_mesh['proj'].T @ trans_src.T
         mesh['U'] = torch.tensor(final_U).float()
@@ -397,24 +398,27 @@ def filter_mesh(meshes, source_mesh, SCALE):
     R_xs = []
     R_ys = []
     R_zs = []
-    t_xs = []
-    t_ys = []
-    t_zs = []
     
-    ts = []
     Rs = []
+    
+    vertices = [mesh['value'].flatten(0) for mesh in meshes]
+
+    vertices = torch.stack(vertices, dim=0).transpose(0, 1)
+    print(f'vertices shape: {vertices.shape}')
+
+    filtered_vertices = []
+    for vs in vertices:
+        filtered_vertices.append(torch.tensor(filter_values(vs.numpy(), beta=10.0)).float())
+    # filtered_vertices = torch.stack(filtered_vertices).transpose(0, 1).contiguous().view(len(filtered_vertices[0]), -1, 3)
+    filtered_vertices = vertices.transpose(0, 1).contiguous().view(len(filtered_vertices[0]), -1, 3)
+    
     for i, mesh in enumerate(meshes):
-        he_R, t = mesh['R'], mesh['t']
+        he_R = mesh['R']
         Rs.append(he_R)
-        ts.append(t)
         R_x, R_y, R_z = matrix2euler(he_R)
-        t_x, t_y, t_z = t
         R_xs.append(R_x)
         R_ys.append(R_y)
         R_zs.append(R_z)
-        t_xs.append(t_x)
-        t_ys.append(t_y)
-        t_zs.append(t_z)
     
     R_xs = torch.tensor(R_xs).float()
     R_ys = torch.tensor(R_ys).float()
@@ -449,16 +453,51 @@ def filter_mesh(meshes, source_mesh, SCALE):
     # t_ys = final_Us[:, 3, 1]
     # t_zs = final_Us[:, 3, 2]
 
+    t_xs = []
+    t_ys = []
+    t_zs = []
+    
+    for R_x, R_y, R_z, vertice, mesh in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered, filtered_vertices, meshes):
+        new_R = torch.tensor(euler2matrix([R_x, R_y, R_z])).float()
+        new_t = mesh['t'].copy()
+        mesh['R'] = new_R 
+
+        rot_src = source_mesh['view'].copy()
+        trans_src = source_mesh['viewport'].copy()
+
+        r = R.from_matrix(rot_src[:3, :3])
+
+        rot_src[:3, :3] = new_R.numpy().astype(np.float32)
+        rot_src[:3, 3] = new_t.astype(np.float32)[:3]
+        # trans_src[:3, 3] = new_t[:3].numpy().astype(np.float32)
+        
+        final_U = rot_src.T @ source_mesh['proj'].T @ source_mesh['viewport'].T
+        t_xs.append(final_U[3, 0])
+        t_ys.append(final_U[3, 1])
+        t_zs.append(final_U[3, 2])
+        # final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
+        print(f'U: {final_U}')
+        print(f'new_t: {new_t}')
+        print(f'rot_src: {rot_src}')
+        print(f'rot_drv: {mesh["view"]}')
+        print(f'source_proj: {source_mesh["proj"]}')
+        print(f'drv proj: {source_mesh["proj"]}')
+        print(f'drv proj: {meshes[0]["proj"]}')
+        # while True:
+        #     continue
+        mesh['U'] = torch.tensor(final_U).float()
+        mesh['value'] = vertice
+        
     t_x_source, t_y_source, t_z_source = source_mesh['t']
     t_xs = torch.tensor(np.stack(t_xs)).float()
     t_ys = torch.tensor(np.stack(t_ys)).float()
     t_zs = torch.tensor(np.stack(t_zs)).float()
 
-    # t_xs_adapted = adapt_values(t_x_source, t_xs, minimum=32, maximum=224, center_align=True)
-    # t_ys_adapted = adapt_values(t_y_source, t_ys, minimum=32, maximum=224, center_align=True)
+    t_xs_adapted = adapt_values(t_x_source, t_xs, minimum=32, maximum=224, center_align=True)
+    t_ys_adapted = adapt_values(t_y_source, t_ys, minimum=32, maximum=224, center_align=True)
     t_zs_adapted = adapt_values(t_z_source, t_zs, center_align=True)
-    t_xs_adapted = torch.tensor(t_xs)
-    t_ys_adapted = torch.tensor(t_ys)
+    # t_xs_adapted = torch.tensor(t_xs)
+    # t_ys_adapted = torch.tensor(t_ys)
     # t_zs_adapted = torch.tensor(t_zs)
     
     t_xs_filtered = torch.tensor(filter_values(t_xs_adapted.numpy())).float()
@@ -468,29 +507,10 @@ def filter_mesh(meshes, source_mesh, SCALE):
     # t_ys_filtered = t_ys_adapted
     # t_zs_filtered = t_zs_adapted
     
-    for R_x, R_y, R_z, t_x, t_y, t_z, mesh in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered, t_xs_filtered, t_ys_filtered, t_zs_filtered, meshes):
-        new_R = torch.tensor(euler2matrix([R_x, R_y, R_z])).float()
-        new_t = torch.stack([t_x, t_y, t_z], dim=0).float()
-        mesh['R'] = new_R 
-        mesh['t'] = new_t
-
-        rot_src = source_mesh['view'].copy()
-        trans_src = source_mesh['viewport'].copy()
-
-        r = R.from_matrix(rot_src[:3, :3])
-
-        rot_src[:3, :3] = new_R.numpy().astype(np.float32)
-
-        trans_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
-        
-        final_U = rot_src.T @ source_mesh['proj'].T @ source_mesh['viewport'].T
-        final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
-        print(f'drv proj: {source_mesh["proj"]}')
-        print(f'drv proj: {meshes[0]["proj"]}')
-        # while True:
-        #     continue
-        mesh['U'] = torch.tensor(final_U).float()
-
+    for t_x, t_y, t_z, mesh in zip(t_xs_filtered, t_ys_filtered, t_zs_filtered, meshes):
+        new_t = torch.stack([t_x, t_y, t_z]).float()
+        mesh['U'][3, :3] = new_t[:3]
+    
 def get_mesh_image_section(mesh, frame_shape, section_indices, sections_indices_splitted):
     # mesh: N0 x 3
     secs = draw_section(mesh[section_indices, :2].numpy().astype(np.int32), frame_shape, section_config=sections_indices_splitted[:6], groups=[0] * 6, split=False) # (num_sections) x H x W x 3
@@ -565,7 +585,7 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    tmp[:, :, 2] = tmp[:, :, 2] / 10
+    tmp[:, :, 2] = tmp[:, :, 2] / 5
     kp_transformed = tmp # B x N x 3
 
 
@@ -710,7 +730,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     frame_shape = config['dataset_params']['frame_shape']
 
     if opt.source_dir.endswith('.mp4'):
-        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '00000.png'))
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '0000000.png'))
     else:
         source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
@@ -932,12 +952,13 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             # use driving trans
             final_trans = driving_pose['t'][:3]
             print(f'final_trans: {final_trans}')
-            final_trans = driving_landmarks[driven_pose_index]['p']['U'].copy()[3, :3]
+            final_trans = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, 3]
             # print(f'pose_idx: {driven_pose_index}')
             # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
             mesh['t'] = final_trans
             mesh['viewport'] = driving_landmarks[driven_pose_index]['p']['viewport'].copy()
             mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj'].copy()
+            mesh['view'] = driving_landmarks[driven_pose_index]['p']['view'].copy()
         else:
             mesh['U'] = driving_Us[i]
             
@@ -991,12 +1012,14 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     # mesh styling
     meshed_frames = []
 
+    source_mesh_value = (source_mesh['value'][17:] + 1) * SCALE
     for i, frame in enumerate(predictions):
         frame = np.ascontiguousarray(img_as_ubyte(frame))
         # if i >= len(target_meshes):
         #     continue
         # mesh = target_meshes[i]
         # frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
+        # frame = draw_section(source_mesh_value[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
         meshed_frames.append(frame)
 
     predictions = meshed_frames

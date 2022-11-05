@@ -1,6 +1,1 @@
-m2m/img/00003.png,mead_samples/neutral_001.mp4
-m2m/img/00004.png,mead_samples/ang_001.mp4
-young_v2/00015.png,mead_samples/ang_001.mp4
-celeb/E_00001_cropped.png,mead_samples/ang_001.mp4
-celeb/E_00002_cropped.png,mead_samples/ang_001.mp4
-celeb/W_00006_cropped.png,mead_samples/ang_001.mp4
+mead_samples/sad_001.mp4,M09/neutral_001.mp4

@@ -62,14 +62,7 @@ class THPipeline():
                 shutil.rmtree(dest_path, ignore_errors=True)
                 os.makedirs(dest_path)
             self.landmark_model.preprocess_video(src_path, dest_file_path)
-            
-        print(f'extract_landmarks: {extract_landmarks}')
-        if extract_landmarks:
-            rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
-        else:
-            rewritten = False
-            
-        if preprocess and rewritten:
+
             frames_dir = os.path.join(dest_path, 'frames')
             if os.path.exists(frames_dir):
                 shutil.rmtree(frames_dir)
@@ -87,6 +80,15 @@ class THPipeline():
             
             for i, frame in enumerate(driving_video):
                 imageio.imwrite(os.path.join(frames_dir, '{:05d}.png'.format(i)), frame)
+                
+            
+        print(f'extract_landmarks: {extract_landmarks}')
+        if extract_landmarks:
+            rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
+        else:
+            rewritten = False
+    
+
             
 
     def inference(self, src_name, drv_name, output_dir, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):

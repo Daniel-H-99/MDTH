@@ -57,7 +57,37 @@ class MetricEvaluater():
         self.dataloader = DataLoader
         self.landmark_model = LandmarkModel(config.config.common.checkpoints.landmark_model.dir) if landmark_model is None else landmark_model
         self.inception = InceptionResnetV1(pretrained='vggface2').eval().to('cuda:0')
+        self.openface_dir = '/home/server19/minyeong_workspace/OpenFace/build/bin'
         self.cache = {}
+        
+    def openface_extract_feature_from_dir(self, x, save_dir):
+        featurer = os.path.join(self.openface_dir, 'FeatureExtraction')
+        out_name = os.path.join(save_dir, os.path.basename(x) + '.csv')
+        if os.path.exists(out_name):
+            return out_name
+        
+        cmd = f'{featurer} -fdir {x} -out_dir {save_dir};rm -rf '
+        # os.makedir(os.path.join(x, '..', 'openface'))
+        os.system(cmd)
+        
+        aligned_path = os.path.join(save_dir, os.path.basename(x) + '_aligned')
+        cmd = f'rm -rf {aligned_path}'
+        os.system(cmd)
+        
+        return out_name
+
+    def load_csv_as_dict(self, name):
+        arr = np.loadtxt(name, delimiter=',', dtype=str)
+        d = {line[0]: line[1:].astype(np.float32) for line in arr.T}
+        return d 
+    
+    def load_au_c_from_csv(self, fname):
+        d = self.load_csv_as_dict(fname)
+        d_au = {}
+        for k in list(d.keys()):
+            if k.startswith('AU') and k.endswith('c'):
+                d_au[k] = d[k]
+        return d_au
         
     def get_dataloader(self, path, **kwargs):
         dataset = self.dataset(path)
@@ -219,6 +249,48 @@ class MetricEvaluater():
         
         return res
 
+    def f1(self, x, y):
+        ## x, y are torch boolean tensor
+        precision = (x * (x == y)).sum() / x.sum()
+        recall = (y * (x == y)).sum() / y.sum()
+        TP = (x * (x == y)).sum()
+        FP = (x * (x != y)).sum()
+        FN = ((x == False) * (x != y)).sum()
+        
+
+        precision = TP / (TP + FP)
+        recal = TP / (TP + FN)
+        f1 = 2 * TP / (2 * TP + FP + FN)
+
+        return {'precision': precision, 'recall': recall, 'f1': f1}
+    
+    def AUCON(self, x, y, is_path=True):
+        # x, y are paths to session/frames 
+        ## run open face evaluation
+        openface_dir_x = os.path.join(x, '..', 'openface')
+        openface_dir_y = os.path.join(y, '..', 'openface')
+        
+        file_x = self.openface_extract_feature_from_dir(x, openface_dir_x)
+        file_y = self.openface_extract_feature_from_dir(y, openface_dir_y)
+        
+        feat_x = self.load_au_c_from_csv(file_x)
+        feat_y = self.load_au_c_from_csv(file_y)
+        
+        f1_scores = {}
+        for k in list(feat_x.keys()):
+            au_c_x = torch.tensor(feat_x[k]).bool()
+            au_c_y = torch.tensor(feat_y[k]).bool()
+            f1 = self.f1(au_c_x, au_c_y)
+            f1_scores[k] = f1['f1']
+        
+        vs = []
+        for v in list(f1_scores.values()):
+            if not torch.isnan(v):
+                vs.append(v)
+        mean = torch.stack(vs).mean()
+
+        return mean
+        
     def CSIM(self, x, y, is_path):
         # x, y: B x C x H x W
         if is_path:
@@ -232,9 +304,6 @@ class MetricEvaluater():
         res = torch.einsum('bd,cd->bc', F.normalize(x_feat), F.normalize(y_feat))
             
         return res
-    
-    def AUCON(self, x, y, is_path):
-        pass
         
     def run(self, metrics=[]):
         pass

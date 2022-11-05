@@ -22,7 +22,7 @@ config:
                 config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
                 model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50_ft_2/00000044-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'                    
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'                     
         attr:
             fps: 25
     preprocess:
@@ -52,20 +52,21 @@ config:
             dir: '@res_path'
 dynamic:
     gpus: [0]
-    mode: 'pair'
+    mode: 'combination'
     input_as_file: True
     inputs:
-        pair: 'inputs/vox_eval_group_3_homo.txt'
-    label: 'f_vox_eval_group_3_homo'
+        source: 'inputs/source_single.txt'
+        driving: 'inputs/vox_single.txt'
+    label: 'f_vox_single'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
-    save_frames: True
+    save_frames: False
     stage: 2
-    relative_headpose: False
+    relative_headpose: True
     extract_landmarks: False
     preprocess: False
-    skip_eval: False
+    skip_eval: True
     load_exp: ''
 
     

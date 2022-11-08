@@ -225,16 +225,14 @@ class ExpTransformer(nn.Module):
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         
-        self.id_encoder = MeshEncoder(num_kp=self.num_kp, latent_dim=latent_dim)
+        self.id_encoder = MeshEncoder(n_vertices=478, num_kp=self.num_kp, latent_dim=latent_dim)
         self.kp_decoder = nn.Sequential(
             nn.Linear(self.latent_dim, self.num_kp * 3),
             nn.Tanh()
         )
 
-
-
-        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 478, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 478, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
         self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))

@@ -175,18 +175,18 @@ def keypoint_transformation(kp_canonical, mesh):
     else:
         kp_normed = kp_canonical['value']
         
-    tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
-    tmp = tmp.matmul(mesh['U']) # B x N x 4
-    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['denormalizer'].transpose(1, 2))[:, :, :3] # B x N x 3
+    # tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
     tmp[:, :, 2] = tmp[:, :, 2] / 5
     kp_transformed = tmp # B x N x 3
     
     
     tmp = kp_canonical['value']
 
-    tmp = torch.cat([tmp, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
-    tmp = tmp.matmul(mesh['U']) # B x N x 4
-    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    tmp = torch.cat([tmp, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['denormalizer'].transpose(1, 2))[:, :, :3] # B x N x 3
+    # tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
     tmp[:, :, 2] = tmp[:, :, 2] / 5
 
     kp_canonical_transformed = tmp # B x N x 3
@@ -945,10 +945,10 @@ class GeneratorFullModelWithSeg(torch.nn.Module):
         self.scales = train_params['scales']
         self.disc_scales = self.discriminator.scales
         self.pyramid = ImagePyramide(self.scales, generator.image_channel)
-        self.pyramid_cond = ImagePyramide(self.scales, generator.image_channel + 1)
+        # self.pyramid_cond = ImagePyramide(self.scales, generator.image_channel + 1)
         if torch.cuda.is_available():
             self.pyramid = self.pyramid.cuda()
-            self.pyramid_cond = self.pyramid_cond.cuda()
+            # self.pyramid_cond = self.pyramid_cond.cuda()
             
         self.loss_weights = train_params['loss_weights']
 
@@ -1157,7 +1157,7 @@ class DiscriminatorFullModelWithSeg(torch.nn.Module):
         self.discriminator = discriminator
         self.train_params = train_params
         self.scales = self.discriminator.scales
-        self.pyramid = ImagePyramide(self.scales, generator.image_channel + 1)
+        self.pyramid = ImagePyramide(self.scales, generator.image_channel)
         if torch.cuda.is_available():
             self.pyramid = self.pyramid.cuda()
 
@@ -1175,8 +1175,8 @@ class DiscriminatorFullModelWithSeg(torch.nn.Module):
         # pyramide_real = self.pyramid(x['driving'])
         # pyramide_generated = self.pyramid(generated['prediction'].detach())
 
-        pyramide_real = self.pyramid(torch.cat([x['driving_mesh']['_mesh_img_sec'].cuda(), x['driving']], dim=1))
-        pyramide_generated = self.pyramid(torch.cat([x['driving_mesh']['mesh_img_sec'].cuda(), generated['prediction'].detach()], dim=1))
+        pyramide_real = self.pyramid(x['driving'])
+        pyramide_generated = self.pyramid(generated['prediction'].detach())
         
         discriminator_maps_generated = self.discriminator(pyramide_generated)
         discriminator_maps_real = self.discriminator(pyramide_real)
@@ -1311,22 +1311,24 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
             kp_driving = keypoint_transformation(kp_canonical_drv, driving_mesh)
 
-            kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
-            kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
-            kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
-            kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
+            # kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
+            # kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
+            # kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
+            # kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
             
 
             
             generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
+            print(f'input value: {source_mesh["value"]}')
+            print(f'kp_source: {kp_source["value"]}')
             generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
             
             generated['source_kp_canonical'] = {'value': kp_source['canonical']}
             generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
-            generated['source_mesh_image'] = kp_source['mesh_img_sec']
-            generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
+            # generated['source_mesh_image'] = kp_source['mesh_img_sec']
+            # generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
             
             # if cycled_drive:
             #     ## cycled expression drive
@@ -1419,8 +1421,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['perceptual'] = value_total
 
             if self.loss_weights['generator_gan'] != 0:
-                pyramide_real = self.pyramid_cond(torch.cat([kp_driving['_mesh_img_sec'].cuda(), x['driving']], dim=1))
-                pyramide_generated = self.pyramid_cond(torch.cat([kp_driving['mesh_img_sec'].cuda(), generated['prediction']], dim=1))
+                # pyramide_real = self.pyramid_cond(torch.cat([kp_driving['_mesh_img_sec'].cuda(), x['driving']], dim=1))
+                # pyramide_generated = self.pyramid_cond(torch.cat([kp_driving['mesh_img_sec'].cuda(), generated['prediction']], dim=1))
                 discriminator_maps_generated = self.discriminator(pyramide_generated)
                 discriminator_maps_real = self.discriminator(pyramide_real)
                 

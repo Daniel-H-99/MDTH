@@ -4,4 +4,4 @@ models/fv2v2/log/
 models/fv2v2/*.pt
 models/fv2v2/*.tar
 models/fv2v2/*.pth
-
+fv2v2/test/exp_check_mp_stability

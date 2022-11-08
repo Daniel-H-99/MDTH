@@ -21,6 +21,7 @@ from skimage.transform import resize
 from skimage import img_as_ubyte, img_as_float32
 import torch.multiprocessing as mp
 import math
+import shutil
 ###############################################################
 from modules.keypoint_detector import HEEstimator, ExpTransformer, KPDetector
 from modules.landmark_model import LandmarkModel
@@ -604,7 +605,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
         device = f'cuda:{gpu_list[rank]}'
         num_gpus = len(gpu_list)
 
-        bs = 1 * num_gpus
+        bs = 1
 
         driving_meshes = driving_meshes[rank * data_per_node:(rank + 1) * data_per_node]
 
@@ -619,6 +620,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
 
         _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
 
+        assert len(driving_meshes) == len(driving_video)
         for frame_idx in tqdm(range(0, len(driving_meshes), bs)):
             driving_frame = driving_video[frame_idx:frame_idx+bs].to(device)
             _driving_mesh = preprocess_dict(driving_meshes[frame_idx:frame_idx+bs], device=device)
@@ -707,11 +709,35 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
     driving_video = []
     fids = []
+    
+    # print(f'length of loaded fid: {len(fids)}')
+    # print(f'driving dir: {opt.driving_dir}')
+    # print(f'length of loaded driving frames: {len(driving_frames_path)}')
+    # while True:
+    #     continue
+
     for frame_path in driving_frames_path:
-        driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
+        # print(f'loading image: {os.path.join(opt.driving_dir, "frames", frame_path)}')
+        # print(f'loading image: {os.path.join(opt.driving_dir, "frames", frame_path)}')
+        cached_path = os.path.join(opt.driving_dir, 'frames', frame_path)
+        while True:
+            try:
+                driving_frame = imageio.imread(cached_path)
+                break
+            except:
+                vid_id = os.path.basename(opt.driving_dir)
+                vid_id = vid_id.split('%')[1]
+                raw_path = f'/mnt/hdd/minyeong_workspace/data/Voxceleb/test/{vid_id}/{frame_path}'
+                shutil.copy(raw_path, cached_path)
+                print(f'[Raw Read]')
+                print(f'vid id: {vid_id}')
+                print(f'raw_path: {raw_path}')
+                print(f'cacheD_path: {cached_path}')
+
         driving_video.append(driving_frame)
         fid = int(frame_path.split('.png')[0])
         fids.append(fid)
+
     order = torch.tensor(fids).argsort()
     # print(f'driving frame shape: {driving_frame')
     driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))[order]
@@ -730,7 +756,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     frame_shape = config['dataset_params']['frame_shape']
 
     if opt.source_dir.endswith('.mp4'):
-        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '0000000.png'))
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '00000.png'))
     else:
         source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
@@ -779,6 +805,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     driving_landmarks = torch.load(os.path.join(opt.driving_dir, '3d_landmarks.pt'))
     num_of_frames = len(driving_landmarks)
+
     driving_meshes = []
     
     driving_landmarks_from_flame = [driving_landmark['3d_landmarks'].float() for driving_landmark in driving_landmarks]
@@ -1011,21 +1038,26 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     
     # mesh styling
     meshed_frames = []
-
+    mesh_frames = []
     source_mesh_value = (source_mesh['value'][17:] + 1) * SCALE
     for i, frame in enumerate(predictions):
         frame = np.ascontiguousarray(img_as_ubyte(frame))
         # if i >= len(target_meshes):
         #     continue
         # mesh = target_meshes[i]
-        # frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
+        paper = np.zeros_like(frame)
+        reversed_mesh = mesh.numpy().copy()
+        reversed_mesh[:, 1] = 2 * SCALE - reversed_mesh[:, 1]
+        paper = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=paper)
         # frame = draw_section(source_mesh_value[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
         meshed_frames.append(frame)
+        mesh_frames.append(paper)
 
     predictions = meshed_frames
 
     imageio.mimsave(os.path.join(opt.result_dir, opt.result_video), predictions, fps=fps)
-    
+    imageio.mimsave(os.path.join(opt.result_dir, 'mesh_video.mp4'), mesh_frames, fps=fps)
+
     if save_frames:
         for i, frame in enumerate(meshed_frames):
             imageio.imwrite(os.path.join(opt.result_dir, 'frames', '{:05d}.png'.format(i)), frame)

@@ -25,6 +25,9 @@ from torch import nn
 from itertools import chain
 import os
 import sys
+import shutil
+
+from PIL import Image
 root_dir = str(pathlib.Path(__file__).parent / '..')
 sys.path.insert(0, root_dir)
 
@@ -32,6 +35,11 @@ from pipelines.landmark_model import LandmarkModel
 from facenet_pytorch import InceptionResnetV1
 
 
+# def imread(path):
+#     img = Image.open(path).convert('RGB')
+#     img = np.asarray(img).astype(np.uint8)
+#     print(f'loading image: {path}')
+#     return img
 
 ## load images from directory
 class DATASET(Dataset):
@@ -111,8 +119,26 @@ class MetricEvaluater():
                 file_y = dict_y[fid_x]
                 path_x = os.path.join(x, file_x)
                 path_y = os.path.join(y, file_y)
-                frame_x = img_as_float32(imread(path_x))
-                frame_y = img_as_float32(imread(path_y))
+                while True:
+                    try:
+                        print(f'reading frame: {path_x}')
+                        frame_x = img_as_float32(imread(path_x))
+                        frame_y = img_as_float32(imread(path_y))
+                        break
+                    except:
+                        print(f'trying to read from source')
+                        cached_path = path_y
+                        vid_id = os.path.basename(os.path.dirname(y))
+                        vid_id = vid_id.split('%')[1]
+                        frame_path = os.path.basename(cached_path)
+                        raw_path = f'/mnt/hdd/minyeong_workspace/data/Voxceleb/test/{vid_id}/{frame_path}'
+                        shutil.copy(raw_path, cached_path)
+                        # shutil.copy(raw_path, path_x)
+                        print(f'[Raw Read]')
+                        print(f'vid id: {vid_id}')
+                        print(f'raw_path: {raw_path}')
+                        print(f'cached_path: {cached_path}')
+
                 pairs.append([frame_x, frame_y])
                 
         print(f'len frames: {len(pairs)}')
@@ -131,8 +157,26 @@ class MetricEvaluater():
         
         for file in files_x:
             path_x = os.path.join(x, file)
-            frame_x = img_as_float32(imread(path_x))
-            frames.append(frame_x)
+            while True:
+                print(f'looping ')
+                try:
+                    print(f'reading')
+                    frame_x = img_as_float32(imread(path_x))
+                    frames.append(frame_x)
+                    print(f'read success')
+                    break
+                except:
+                    print(f'in except: {path_x}')
+                    cached_path = path_x
+                    vid_id = os.path.dirname(os.path.dirname(x))
+                    vid_id = vid_id.split('%')[1]
+                    frame_path = os.path.basename(cached_path)
+                    raw_path = f'/mnt/hdd/minyeong_workspace/data/Voxceleb/test/{vid_id}/{frame_path}'
+                    # shutil.copy(raw_path, cached_path)
+                    print(f'[Raw Read]')
+                    print(f'vid id: {vid_id}')
+                    print(f'raw_path: {raw_path}')
+                    print(f'cacheD_path: {cached_path}')
         
         frames = torch.tensor(np.array(frames)).permute(0, 3, 1, 2)
         self.cache[x] = frames
@@ -256,14 +300,42 @@ class MetricEvaluater():
         TP = (x * (x == y)).sum()
         FP = (x * (x != y)).sum()
         FN = ((x == False) * (x != y)).sum()
-        
+        TN = ((x == False) * (x == y)).sum()
 
         precision = TP / (TP + FP)
         recal = TP / (TP + FN)
         f1 = 2 * TP / (2 * TP + FP + FN)
-
-        return {'precision': precision, 'recall': recall, 'f1': f1}
+        accuracy = (TP + TN) / len(x)
+        return {'precision': precision, 'recall': recall, 'f1': f1, 'accuracy': accuracy}
     
+    def AUACC(self, x, y, is_path=True):
+        # x, y are paths to session/frames 
+        ## run open face evaluation
+        openface_dir_x = os.path.join(x, '..', 'openface')
+        openface_dir_y = os.path.join(y, '..', 'openface')
+        
+        file_x = self.openface_extract_feature_from_dir(x, openface_dir_x)
+        file_y = self.openface_extract_feature_from_dir(y, openface_dir_y)
+        
+        feat_x = self.load_au_c_from_csv(file_x)
+        feat_y = self.load_au_c_from_csv(file_y)
+    
+        accs = {}
+
+        for k in list(feat_x.keys()):
+            au_c_x = torch.tensor(feat_x[k]).bool()
+            au_c_y = torch.tensor(feat_y[k]).bool()
+            f1 = self.f1(au_c_x, au_c_y)
+            accs[k] = f1['accuracy']
+
+        vs = []
+        for v in list(accs.values()):
+            if not torch.isnan(v):
+                vs.append(v)
+        mean_acc = torch.stack(vs).mean()
+
+        return mean_acc
+
     def AUCON(self, x, y, is_path=True):
         # x, y are paths to session/frames 
         ## run open face evaluation
@@ -277,6 +349,7 @@ class MetricEvaluater():
         feat_y = self.load_au_c_from_csv(file_y)
         
         f1_scores = {}
+
         for k in list(feat_x.keys()):
             au_c_x = torch.tensor(feat_x[k]).bool()
             au_c_y = torch.tensor(feat_y[k]).bool()
@@ -287,9 +360,10 @@ class MetricEvaluater():
         for v in list(f1_scores.values()):
             if not torch.isnan(v):
                 vs.append(v)
-        mean = torch.stack(vs).mean()
+        mean_f1 = torch.stack(vs).mean()
 
-        return mean
+        return mean_f1
+
         
     def CSIM(self, x, y, is_path):
         # x, y: B x C x H x W

@@ -56,7 +56,7 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/vox_eval_group_2_homo.txt'
-    label: 'f_vox_eval_group_2_homo'
+    label: 'ft_vox_eval_group_2_homo'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
@@ -66,7 +66,7 @@ dynamic:
     extract_landmarks: False
     preprocess: False
     skip_eval: False
-    load_exp: ''
+    load_exp: '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/ft_vox_eval_group_2_homo_2022-11-04T12:50:35/materials.pt'
 
     
     

@@ -18,13 +18,13 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50_ft_2/00000044-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/mesh_mesh_fc_stage2_v2_logloss50.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50_ft_2/00000044-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/mesh_mesh_fc_stage2_v2_logloss50.yaml'                   
         attr:
-            fps: 25
+            fps: 30
     preprocess:
         input:
             dir: '@raw_path' 
@@ -56,16 +56,16 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/pair_hetero.txt'
-    label: 'mesh_mesh_v2_loglos_ft_44_mead_homo'
+    label: 'test_189'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
     save_frames: True
     stage: 2
     relative_headpose: True
-    extract_landmarks: True
-    preprocess: True
-    skip_eval: False
+    extract_landmarks: False
+    preprocess: False
+    skip_eval: True
     load_exp: ''
 
     

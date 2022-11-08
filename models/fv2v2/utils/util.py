@@ -78,6 +78,29 @@ def normalized_to_pixel_coordinates(landmark_dict, image_width, image_height):
 
 #     return mesh, noise_real, normalizer
     
+def extract_mesh_normalize(image, reference_dict):
+    # image: RGB, ubyte
+    with mp_face_mesh.FaceMesh(
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5) as face_mesh:
+            annotated_image = image.copy()
+            image_rows, image_cols, _ = image.shape
+            results = face_mesh.process(image)
+            target_dict = landmark_to_dict(results.multi_face_landmarks[0].landmark)
+            target_dict = normalized_to_pixel_coordinates(target_dict, image_cols, image_rows)
+            raw_mesh = landmarkdict_to_mesh_tensor(target_dict)
+            raw_mesh[:, 2] = raw_mesh[:, 2]
+            # raw_mesh[:, 2] = raw_mesh[:, 2] - 50
+            R, t, c = Umeyama_algorithm(reference_dict, target_dict)
+            target_dict['R'] = R
+            target_dict['t'] = t
+            target_dict['c'] = c
+            normalized_mesh = landmarkdict_to_normalized_mesh_tensor(target_dict)
+            return {'value': normalized_mesh, 'R': R, 't': t, 'c': c, 'raw_value': raw_mesh}
+            # return {'raw_value': raw_mesh}
+
 def extract_mesh(image):
     # image: RGB, ubyte
     with mp_face_mesh.FaceMesh(

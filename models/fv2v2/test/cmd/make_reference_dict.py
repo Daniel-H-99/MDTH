@@ -19,7 +19,7 @@ mesh_tensor = extract_mesh(img)['raw_value']
 
 mesh_dict = mesh_tensor_to_landmarkdict(mesh_tensor)
 
-save_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/exp_check_mp_statbility/reference_mesh.pt'
+save_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
 
 torch.save(mesh_dict, save_path)
 

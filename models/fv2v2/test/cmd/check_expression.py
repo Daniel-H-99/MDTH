@@ -13,16 +13,24 @@ import utils
 from utils.util import extract_mesh_normalize, mesh_tensor_to_landmarkdict, get_mesh_image
 
 data_dir = '/mnt/hdd/minyeong_workspace/Experiment/proc'
-input_file = 'exp_check_mp_stability/inputs.txt'
-result_dir = 'exp_check_mp_stability'
-ref_path = 'exp_check_mp_stability/reference_mesh.pt'
+input_file = 'exp_check_expression/inputs.txt'
+result_dir = 'exp_check_expression/'
+ref_path = 'reference_mesh.pt'
 ref = torch.load(ref_path)
+config = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/config/mesh_mesh_fc_stage2_v2.yaml'
+config = 
+
+
 shape = (256, 256)
 
 with open(input_file) as f:
     inputs = f.readlines()
 
 inputs = [v.strip() for v in inputs]
+
+### load models
+self.exp_transformer = export.load_exp_transformer(self.config.config.common.checkpoints.exp_transformer.config, self.config.config.common.checkpoints.exp_transformer.model, self.gpus)
+self.generator = export.load_generator(self.config.config.common.checkpoints.generator.config, self.config.config.common.checkpoints.generator.model, self.gpus)
 
 for vid in inputs:
     print(f'working video: {vid}')

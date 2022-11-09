@@ -17,6 +17,7 @@ input_file = 'exp_check_mp_stability/inputs.txt'
 result_dir = 'exp_check_mp_stability'
 ref_path = 'exp_check_mp_stability/reference_mesh.pt'
 ref = torch.load(ref_path)
+checkpoint_path = '/mnt/hdd/minyeong_workspace/MDTH/mesh_mesh_fc_v2_logloss50/00000189-checkpoint.pth.tar'
 shape = (256, 256)
 
 with open(input_file) as f:

@@ -592,6 +592,71 @@ def keypoint_transformation(kp_canonical, mesh):
 
     return {'value': kp_transformed, 'normed': kp_normed}   
 
+def make_animation_expression(rank, gpu_list, source_image, driving_expressions, source_mesh, data_per_node, generator, exp_transformer):
+    # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
+    #                                         world_size=len(gpu_list), rank=rank)
+    # generator = generator.to(gpu_list[rank])
+    # generator = torch.nn.parallel.DistributedDataParallel(generator, device_ids=[gpu_list[rank]])
+    res = {}
+
+    with torch.no_grad():
+        predictions = []
+        device = f'cuda:{gpu_list[rank]}'
+        num_gpus = len(gpu_list)
+
+        bs = 1
+
+        source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(bs, 1, 1, 1)
+        source = source.to(device)
+
+        kp_source = preprocess_dict([source_mesh] * bs, device=device)
+
+        _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
+
+        assert len(driving_meshes) == len(driving_video)
+        for frame_idx in tqdm(range(0, len(driving_expressions), bs)):
+            driving_expression = driving_expressions[frame_idx:frame_idx+bs].to(device)
+            if len(driving_frame) < bs:
+                _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
+                source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
+                source = source.to(device)
+
+            src_embedding = exp_transformer.encode({'mesh': _source_mesh['value']})
+            tf_output_src = exp_transformer.decode(src_embedding)
+            kp_canonical = {'value': tf_output_src['kp']}
+            src_delta = tf_output_src['delta']
+
+            delta_driving_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': driving_expression}
+            drv_delta = exp_transformer.module.decode(delta_driving_embedding)['delta']
+            _driving_mesh = copy.deepcopy(source_mesh)
+            _driving_mesh['delta'] = drv_delta
+        
+            # {'value': value, 'jacobian': jacobian}
+            kp_source = keypoint_transformation(kp_canonical, _source_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
+
+            kp_norm = kp_driving
+
+            out = generator(source, kp_source=kp_source, kp_driving=kp_norm)
+
+            predictions.append(np.transpose(out['prediction'].data.cpu().numpy(), [0, 2, 3, 1]))
+
+
+    predictions = np.concatenate(predictions, axis=0)
+    # print(f'predictions shape: {predictions.shape}')
+    # while True:
+    #     pass
+    # predictions = np.ascontiguousarray(np.concatenate(predictions, axis=0)).astype(np.uint8).clip(0, 255))
+    # que.put((rank, predictions))
+
+    # torch.distributed.destroy_process_group()
+    res['predictions'] = predictions
+
+    if extract_driving_code and stage == 2:
+        res['driving_codes'] = np.concatenate(driving_codes, axis=0)
+
+    return res
+
 def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, kp_extractor, he_estimator, use_transformer=True, extract_driving_code=False, que=None, stage=1):
     # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
     #                                         world_size=len(gpu_list), rank=rank)
@@ -1065,4 +1130,82 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     if extract_driving_code and stage == 2:
         np.savetxt(os.path.join(opt.result_dir, 'driving_codes.txt'), res['driving_codes'])
         
+    return predictions
+
+def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list):
+    st = time.time()
+    with open(opt.config) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        
+    fps = opt.fps
+
+    frame_shape = config['dataset_params']['frame_shape']
+
+    if opt.source_dir.endswith('.mp4'):
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '00000.png'))
+    else:
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
+
+    if len(source_image.shape) == 2:
+        source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)
+
+    source_image = resize(img_as_float32(source_image), frame_shape[:2])[..., :3]
+
+    L = frame_shape[0]
+    SCALE = L // 2
+    A = np.array([-1, -1, 0], dtype='float32')[:, np.newaxis] # 3 x 1
+
+    source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
+    if type(source_landmarks) == list:
+        print(f'length: {len(source_landmarks)}')
+        source_landmarks = source_landmarks[0]
+    source_mesh = {}
+    source_mesh['value'] = source_landmarks['3d_landmarks'].float() / SCALE
+    right_iris = source_landmarks['normed_right_iris'].float() / SCALE
+    left_iris = source_landmarks['normed_left_iris'].float() / SCALE
+    # source_mesh['value'][3] = right_iris
+    # source_mesh['value'][4] = left_iris
+    source_mesh['raw_value'] = source_landmarks['3d_landmarks_pose']
+    pose_p = source_landmarks['p']
+    source_mesh['proj'] = pose_p['proj'].copy()
+    source_mesh['view'] = pose_p['view'].copy()
+    source_mesh['viewport'] = pose_p['viewport'].copy()
+    source_mesh['R'] = pose_p['view'][:3, :3]
+    source_mesh['t'] = pose_p['U'][3, :3]
+    source_mesh['U'] = pose_p['U']
+    source_mesh['scale'] = SCALE
+    source_mesh['he_R'] = source_landmarks['he_p']['R']
+    source_mesh['he_t'] = -source_landmarks['he_p']['t']
+
+    ### calc bias ###
+    s = np.linalg.norm((source_mesh['raw_value'][45] - source_mesh['raw_value'][36]) / SCALE) / np.linalg.norm(source_mesh['value'][45] - source_mesh['value'][36])
+    source_mesh['s'] = s
+    b = np.linalg.inv(source_mesh['he_R']) @ ((1 / s) * (source_mesh['U'][3, :3] / SCALE - source_mesh['he_t'] - np.array([1, 1, 0]))[:, np.newaxis])
+    source_mesh['b'] = b
+
+    raw_mesh = source_mesh['raw_value']
+    # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
+
+    ### driving expressions
+    driving_info = opt.driving
+    driving_exp_head = torch.linspace(driving_info.start, driving_info.end, driving_info.slices)
+    num_frames = len(drivnig_exp)
+    driving_expression = torch.zero(num_frames, driving_info.num_heads)
+    torch[:, driving_info.head] = driving_exp_head
+
+    res = make_animation_expression(0, gpu_list, source_image, driving_expression, source_mesh, data_per_node, generator, exp_transformer)
+    predictions = res['predictions']
+    
+    # frame styling
+    styled_frames = []
+
+    for i, frame in enumerate(predictions):
+        frame = np.ascontiguousarray(img_as_ubyte(frame))
+        cv2.putText(img=frame, text=f'head: {driving_info.head}, exp: {driving_exp_head[i]}', org=(300, 100), fontScale=2, color=(255, 255, 255), thickness=1)
+        styled_frames.append(frame)
+
+    predictions = meshed_frames
+
+    imageio.mimsave(os.path.join(opt.result_dir, opt.result_video), predictions, fps=fps)
+
     return predictions

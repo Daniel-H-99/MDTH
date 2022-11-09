@@ -1319,8 +1319,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
             
             generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
-            print(f'input value: {source_mesh["value"]}')
-            print(f'kp_source: {kp_source["value"]}')
+            # print(f'input value: {source_mesh["value"]}')
+            # print(f'kp_source: {kp_source["value"]}')
             generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
             pyramide_real = self.pyramid(x['driving'])
             pyramide_generated = self.pyramid(generated['prediction'])
@@ -1494,16 +1494,16 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 for i in range(kp_canonical['value'].shape[1]):
                     for j in range(kp_canonical['value'].shape[1]):
                         dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
-                        dist = 0.2 - dist      # set Dt = 0.1
+                        dist = 0.1 - dist      # set Dt = 0.1
                         dd = torch.gt(dist, 0) 
                         value = (dist * dd).mean()
                         value_total += value
 
-                kp_mean_depth = kp_canonical['value'][:, :, -1].mean(-1)
-                value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
+                # kp_mean_depth = kp_canonical['value'][:, :, -1].mean(-1)
+                # value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
                 # print(f'kp_mean_depth: {kp_driving["value"][:, :, -1].mean(-1)}')
                 # print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
-                value_total += value_depth
+                # value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
 
             if self.loss_weights['headpose'] != 0:

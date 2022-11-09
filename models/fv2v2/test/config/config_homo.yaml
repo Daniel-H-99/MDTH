@@ -18,11 +18,11 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50_ft_2/00000034-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/mesh_mesh_fc_stage2_v2_logloss50.yaml'         
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/00000019-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/mesh_mesh_fc_stage2_v2_logloss0.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50_ft_2/00000034-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/mesh_mesh_fc_stage2_v2_logloss50.yaml'                   
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/00000019-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/mesh_mesh_fc_stage2_v2_logloss0.yaml'                   
         attr:
             fps: 25
     preprocess:
@@ -56,16 +56,16 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/mead_pair.txt'
-    label: 'mesh_mesh_v2_logloss50_ft_34_mead_homo'
+    label: 'mesh_mesh_v2_logloss0_19_mead_homo'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
-    save_frames: True
+    save_frames: False
     stage: 2
-    relative_headpose: False
+    relative_headpose: True
     extract_landmarks: False
     preprocess: False
-    skip_eval: False
+    skip_eval: True
     load_exp: ''
 
     

@@ -21,6 +21,7 @@ from skimage.transform import resize
 from skimage import img_as_ubyte, img_as_float32
 import torch.multiprocessing as mp
 import math
+import shutil
 ###############################################################
 from modules.keypoint_detector import HEEstimator, ExpTransformer, KPDetector
 from modules.landmark_model import LandmarkModel
@@ -604,7 +605,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
         device = f'cuda:{gpu_list[rank]}'
         num_gpus = len(gpu_list)
 
-        bs = 1 * num_gpus
+        bs = 1
 
         driving_meshes = driving_meshes[rank * data_per_node:(rank + 1) * data_per_node]
 
@@ -614,11 +615,12 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
         kp_source = preprocess_dict([source_mesh] * bs, device=device)
         
         # kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
-        src_feat = he_estimator(source)['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+        # src_feat = he_estimator(source)['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
 
 
         _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
 
+        assert len(driving_meshes) == len(driving_video)
         for frame_idx in tqdm(range(0, len(driving_meshes), bs)):
             driving_frame = driving_video[frame_idx:frame_idx+bs].to(device)
             _driving_mesh = preprocess_dict(driving_meshes[frame_idx:frame_idx+bs], device=device)
@@ -626,9 +628,9 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
-                src_feat = he_estimator(source)['out']
+                # src_feat = he_estimator(source)['out']
                 
-            drv_feat = he_estimator(driving_frame)['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+            # drv_feat = he_estimator(driving_frame)['out']      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             
             
             # driving_mesh['scale'] = source_mesh['scale']
@@ -684,6 +686,19 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
 
     return res
 
+def preprocess_driving_meshes(meshes, L=5):
+    # meshes: L x mesh
+    num_meshes = len(meshes)
+    output = copy.deepcopy(meshes)
+    for i, mesh in enumerate(output):
+        seq = []
+        for j in range(i - L // 2, i - L // 2 + L):
+            j = max(0, j)
+            j = min(num_meshes - 1, j)
+            seq.append(meshes[j]['value'])
+        seq = torch.stack(seq, dim=0)
+        mesh['value'] = seq
+
 def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
     st = time.time()
     with open(opt.config) as f:
@@ -707,16 +722,50 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
     driving_video = []
     fids = []
+    driving_meshes = []
+    # print(f'length of loaded fid: {len(fids)}')
+    # print(f'driving dir: {opt.driving_dir}')
+    # print(f'length of loaded driving frames: {len(driving_frames_path)}')
+    # while True:
+    #     continue
+
     for frame_path in driving_frames_path:
-        driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
+        # print(f'loading image: {os.path.join(opt.driving_dir, "frames", frame_path)}')
+        # print(f'loading image: {os.path.join(opt.driving_dir, "frames", frame_path)}')
+        cached_path = os.path.join(opt.driving_dir, 'frames', frame_path)
+        while True:
+            try:
+                driving_frame = imageio.imread(cached_path)
+                L = driving_frame.shape[0]
+                A = torch.tensor([[-1, -1, 0]]).float() # 3 x 1
+                driving_mesh = extract_mesh_normalize(img_as_ubyte(driving_frame))
+                driving_mesh['value'] = driving_mesh['value'] * 2 / L + A
+                drivin_meshes.append(driving_mesh)
+                break
+            except:
+                vid_id = os.path.basename(opt.driving_dir)
+                vid_id = vid_id.split('%')[1]
+                raw_path = f'/mnt/hdd/minyeong_workspace/data/Voxceleb/test/{vid_id}/{frame_path}'
+                shutil.copy(raw_path, cached_path)
+                print(f'[Raw Read]')
+                print(f'vid id: {vid_id}')
+                print(f'raw_path: {raw_path}')
+                print(f'cacheD_path: {cached_path}')
+
         driving_video.append(driving_frame)
         fid = int(frame_path.split('.png')[0])
         fids.append(fid)
+
     order = torch.tensor(fids).argsort()
     # print(f'driving frame shape: {driving_frame')
     driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))[order]
     # print(f'driving_video shape: {driving_video.shape}')
     driving_video = driving_video.permute(0, 3, 1, 2).float()
+
+    driving_meshes = [drivin_meshes[i] for i in order]
+    
+    ### stage2
+    # driving_meshs = preprocess_driving_meshes(driving_meshes)
 
     # section_indices = []
     # sections_indices_splitted = []
@@ -729,259 +778,272 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     frame_shape = config['dataset_params']['frame_shape']
 
+    source_meshes = []
     if opt.source_dir.endswith('.mp4'):
-        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '0000000.png'))
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '00000.png'))
     else:
         source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
     if len(source_image.shape) == 2:
         source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)
 
+    L = source_image.shape[0]
+    A = torch.tensor([[-1, -1, 0]]).float() # 3 x 1
+    source_mesh = extract_mesh_normalize(img_as_ubyte(source_image))
+    source_mesh['value'] = source_mesh['value'] * 2 / L + A
+    source_meshes.append(source_mesh)
+
+    ### stage2
+    # source_meshes = preprocess_driving_meshes(source_meshes)
+    
+    source_mesh = source_meshes[0]
+
     source_image = resize(img_as_float32(source_image), frame_shape[:2])[..., :3]
 
-    L = frame_shape[0]
-    SCALE = L // 2
-    A = np.array([-1, -1, 0], dtype='float32')[:, np.newaxis] # 3 x 1
+#     L = frame_shape[0]
+#     SCALE = L // 2
+#     A = np.array([-1, -1, 0], dtype='float32')[:, np.newaxis] # 3 x 1
 
-    driving_meshes = []
-    target_meshes = []
+#     driving_meshes = []
+#     target_meshes = []
 
-    source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
-    if type(source_landmarks) == list:
-        print(f'length: {len(source_landmarks)}')
-        source_landmarks = source_landmarks[0]
-    source_mesh = {}
-    source_mesh['value'] = source_landmarks['3d_landmarks'].float() / SCALE
-    right_iris = source_landmarks['normed_right_iris'].float() / SCALE
-    left_iris = source_landmarks['normed_left_iris'].float() / SCALE
-    # source_mesh['value'][3] = right_iris
-    # source_mesh['value'][4] = left_iris
-    source_mesh['raw_value'] = source_landmarks['3d_landmarks_pose']
-    pose_p = source_landmarks['p']
-    source_mesh['proj'] = pose_p['proj'].copy()
-    source_mesh['view'] = pose_p['view'].copy()
-    source_mesh['viewport'] = pose_p['viewport'].copy()
-    source_mesh['R'] = pose_p['view'][:3, :3]
-    source_mesh['t'] = pose_p['U'][3, :3]
-    source_mesh['U'] = pose_p['U']
-    source_mesh['scale'] = SCALE
-    source_mesh['he_R'] = source_landmarks['he_p']['R']
-    source_mesh['he_t'] = -source_landmarks['he_p']['t']
+#     source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
+#     if type(source_landmarks) == list:
+#         print(f'length: {len(source_landmarks)}')
+#         source_landmarks = source_landmarks[0]
+#     source_mesh = {}
+#     source_mesh['value'] = source_landmarks['3d_landmarks'].float() / SCALE
+#     right_iris = source_landmarks['normed_right_iris'].float() / SCALE
+#     left_iris = source_landmarks['normed_left_iris'].float() / SCALE
+#     # source_mesh['value'][3] = right_iris
+#     # source_mesh['value'][4] = left_iris
+#     source_mesh['raw_value'] = source_landmarks['3d_landmarks_pose']
+#     pose_p = source_landmarks['p']
+#     source_mesh['proj'] = pose_p['proj'].copy()
+#     source_mesh['view'] = pose_p['view'].copy()
+#     source_mesh['viewport'] = pose_p['viewport'].copy()
+#     source_mesh['R'] = pose_p['view'][:3, :3]
+#     source_mesh['t'] = pose_p['U'][3, :3]
+#     source_mesh['U'] = pose_p['U']
+#     source_mesh['scale'] = SCALE
+#     source_mesh['he_R'] = source_landmarks['he_p']['R']
+#     source_mesh['he_t'] = -source_landmarks['he_p']['t']
 
-    ### calc bias ###
-    s = np.linalg.norm((source_mesh['raw_value'][45] - source_mesh['raw_value'][36]) / SCALE) / np.linalg.norm(source_mesh['value'][45] - source_mesh['value'][36])
-    source_mesh['s'] = s
-    b = np.linalg.inv(source_mesh['he_R']) @ ((1 / s) * (source_mesh['U'][3, :3] / SCALE - source_mesh['he_t'] - np.array([1, 1, 0]))[:, np.newaxis])
-    source_mesh['b'] = b
+#     ### calc bias ###
+#     s = np.linalg.norm((source_mesh['raw_value'][45] - source_mesh['raw_value'][36]) / SCALE) / np.linalg.norm(source_mesh['value'][45] - source_mesh['value'][36])
+#     source_mesh['s'] = s
+#     b = np.linalg.inv(source_mesh['he_R']) @ ((1 / s) * (source_mesh['U'][3, :3] / SCALE - source_mesh['he_t'] - np.array([1, 1, 0]))[:, np.newaxis])
+#     source_mesh['b'] = b
 
-    raw_mesh = source_mesh['raw_value']
-    # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
+#     raw_mesh = source_mesh['raw_value']
+#     # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
 
-    driving_landmarks = torch.load(os.path.join(opt.driving_dir, '3d_landmarks.pt'))
-    num_of_frames = len(driving_landmarks)
-    driving_meshes = []
+#     driving_landmarks = torch.load(os.path.join(opt.driving_dir, '3d_landmarks.pt'))
+#     num_of_frames = len(driving_landmarks)
+
+#     driving_meshes = []
     
-    driving_landmarks_from_flame = [driving_landmark['3d_landmarks'].float() for driving_landmark in driving_landmarks]
-    driving_Us = [torch.tensor(driving_landmark['p']['U']).float() for driving_landmark in driving_landmarks]
+#     driving_landmarks_from_flame = [driving_landmark['3d_landmarks'].float() for driving_landmark in driving_landmarks]
+#     driving_Us = [torch.tensor(driving_landmark['p']['U']).float() for driving_landmark in driving_landmarks]
     
-    from_flame_bias = 0
+#     from_flame_bias = 0
 
-    ### eye drive ###
-    ROI_EYE_IDX = list(range(17, 27)) + list(range(36, 42)) + list(range(42, 48))
-    LEFT_EYE_LANDMARK_IDX = list(range(12, 18))
-    LEFT_EYEBROW_LANDMARK_IDX = list(range(2, 7))
-    LEFT_IRIS_LANDMARK_IDX = [0]
-    RIGHT_EYE_LANDMARK_IDX = list(range(18, 24))
-    RIGHT_EYEBROW_LANDMARK_IDX = list(range(7, 12))
-    RIGHT_IRIS_LANDMARK_IDX = [1]
-    LEFT_PART_IDX = LEFT_IRIS_LANDMARK_IDX + LEFT_EYEBROW_LANDMARK_IDX + LEFT_EYE_LANDMARK_IDX
-    RIGHT_PART_IDX = RIGHT_IRIS_LANDMARK_IDX + RIGHT_EYEBROW_LANDMARK_IDX + RIGHT_EYE_LANDMARK_IDX
-    LEFT_EYE_ANCHOR_IDX = [15]
-    RIGHT_EYE_ANCHOR_IDX = [18]
-    UPPER_EYES_IDX = [13, 14, 19, 20] 
-    ONLY_EYES_IDX = LEFT_EYE_LANDMARK_IDX
-    EYEBROW_LANDMARK_IDX = LEFT_IRIS_LANDMARK_IDX + RIGHT_IRIS_LANDMARK_IDX 
-    # + LEFT_EYEBROW_LANDMARK_IDX + RIGHT_EYEBROW_LANDMARK_IDX
-    # UPPER_EYES_IDX = ONLY_EYES_IDX
+#     ### eye drive ###
+#     ROI_EYE_IDX = list(range(17, 27)) + list(range(36, 42)) + list(range(42, 48))
+#     LEFT_EYE_LANDMARK_IDX = list(range(12, 18))
+#     LEFT_EYEBROW_LANDMARK_IDX = list(range(2, 7))
+#     LEFT_IRIS_LANDMARK_IDX = [0]
+#     RIGHT_EYE_LANDMARK_IDX = list(range(18, 24))
+#     RIGHT_EYEBROW_LANDMARK_IDX = list(range(7, 12))
+#     RIGHT_IRIS_LANDMARK_IDX = [1]
+#     LEFT_PART_IDX = LEFT_IRIS_LANDMARK_IDX + LEFT_EYEBROW_LANDMARK_IDX + LEFT_EYE_LANDMARK_IDX
+#     RIGHT_PART_IDX = RIGHT_IRIS_LANDMARK_IDX + RIGHT_EYEBROW_LANDMARK_IDX + RIGHT_EYE_LANDMARK_IDX
+#     LEFT_EYE_ANCHOR_IDX = [15]
+#     RIGHT_EYE_ANCHOR_IDX = [18]
+#     UPPER_EYES_IDX = [13, 14, 19, 20] 
+#     ONLY_EYES_IDX = LEFT_EYE_LANDMARK_IDX
+#     EYEBROW_LANDMARK_IDX = LEFT_IRIS_LANDMARK_IDX + RIGHT_IRIS_LANDMARK_IDX 
+#     # + LEFT_EYEBROW_LANDMARK_IDX + RIGHT_EYEBROW_LANDMARK_IDX
+#     # UPPER_EYES_IDX = ONLY_EYES_IDX
     
-    # drv_lmk = 
-    ROI_EYE_IDX_FLAME = torch.tensor(ROI_EYE_IDX) + from_flame_bias
-    drv_eyes = torch.stack([torch.cat([drv_lmk['normed_right_iris'] - torch.tensor([[0, 0, 0]]), drv_lmk['normed_left_iris'] - torch.tensor([[0, 0, 0]]), drv_lmk['3d_landmarks'][ROI_EYE_IDX].float()]) for drv_lmk in driving_landmarks]).float()  # B x n x 3
-    drv_eyes_rel = torch.zeros_like(drv_eyes)
-    print(f'drv eyes shape: {drv_eyes.shape}')
-    print(f'drv eyes anchor shape: {drv_eyes[:, LEFT_EYE_ANCHOR_IDX].shape}')
-    drv_eyes_rel[:, LEFT_PART_IDX] = drv_eyes[:, LEFT_PART_IDX] - drv_eyes[:, LEFT_EYE_ANCHOR_IDX]
-    drv_eyes_rel[:, RIGHT_PART_IDX] = drv_eyes[:, RIGHT_PART_IDX] - drv_eyes[:, RIGHT_EYE_ANCHOR_IDX]
-    mean_drv_eyes_rel = drv_eyes_rel.mean(dim=0)
-    mean_drv_eyes = drv_eyes.mean(dim=0)    # n x 3
+#     # drv_lmk = 
+#     ROI_EYE_IDX_FLAME = torch.tensor(ROI_EYE_IDX) + from_flame_bias
+#     drv_eyes = torch.stack([torch.cat([drv_lmk['normed_right_iris'] - torch.tensor([[0, 0, 0]]), drv_lmk['normed_left_iris'] - torch.tensor([[0, 0, 0]]), drv_lmk['3d_landmarks'][ROI_EYE_IDX].float()]) for drv_lmk in driving_landmarks]).float()  # B x n x 3
+#     drv_eyes_rel = torch.zeros_like(drv_eyes)
+#     print(f'drv eyes shape: {drv_eyes.shape}')
+#     print(f'drv eyes anchor shape: {drv_eyes[:, LEFT_EYE_ANCHOR_IDX].shape}')
+#     drv_eyes_rel[:, LEFT_PART_IDX] = drv_eyes[:, LEFT_PART_IDX] - drv_eyes[:, LEFT_EYE_ANCHOR_IDX]
+#     drv_eyes_rel[:, RIGHT_PART_IDX] = drv_eyes[:, RIGHT_PART_IDX] - drv_eyes[:, RIGHT_EYE_ANCHOR_IDX]
+#     mean_drv_eyes_rel = drv_eyes_rel.mean(dim=0)
+#     mean_drv_eyes = drv_eyes.mean(dim=0)    # n x 3
 
-    src_eyes = torch.cat([source_landmarks['normed_right_iris'], source_landmarks['normed_left_iris'], source_landmarks['3d_landmarks'][ROI_EYE_IDX]]).float()    # n x 3
-    src_eyes_rel  = torch.zeros_like(src_eyes)
-    src_eyes_rel[LEFT_PART_IDX] = src_eyes[LEFT_PART_IDX] - src_eyes[LEFT_EYE_ANCHOR_IDX]
-    src_eyes_rel[RIGHT_PART_IDX] = src_eyes[RIGHT_PART_IDX] - src_eyes[RIGHT_EYE_ANCHOR_IDX]
-    eye_size_drv = mean_drv_eyes[ONLY_EYES_IDX].max(dim=0)[0] - mean_drv_eyes[ONLY_EYES_IDX].min(dim=0)[0] # 3
-    eye_size_src = src_eyes[ONLY_EYES_IDX].max(dim=0)[0] - src_eyes[ONLY_EYES_IDX].min(dim=0)[0]  # 3
-    eye_convert_scale = eye_size_src / eye_size_drv.clamp(min=1e-6)
-    src_eye_width = src_eyes[LEFT_EYE_LANDMARK_IDX].max(dim=0)[0] - src_eyes[LEFT_EYE_LANDMARK_IDX].min(dim=0)[0]
-    left_eye_center = (src_eyes[LEFT_EYE_LANDMARK_IDX].max(dim=0)[0] + src_eyes[LEFT_EYE_LANDMARK_IDX].min(dim=0)[0]) / 2
-    right_eye_center = (src_eyes[RIGHT_EYE_LANDMARK_IDX].max(dim=0)[0] + src_eyes[RIGHT_EYE_LANDMARK_IDX].min(dim=0)[0]) / 2
+#     src_eyes = torch.cat([source_landmarks['normed_right_iris'], source_landmarks['normed_left_iris'], source_landmarks['3d_landmarks'][ROI_EYE_IDX]]).float()    # n x 3
+#     src_eyes_rel  = torch.zeros_like(src_eyes)
+#     src_eyes_rel[LEFT_PART_IDX] = src_eyes[LEFT_PART_IDX] - src_eyes[LEFT_EYE_ANCHOR_IDX]
+#     src_eyes_rel[RIGHT_PART_IDX] = src_eyes[RIGHT_PART_IDX] - src_eyes[RIGHT_EYE_ANCHOR_IDX]
+#     eye_size_drv = mean_drv_eyes[ONLY_EYES_IDX].max(dim=0)[0] - mean_drv_eyes[ONLY_EYES_IDX].min(dim=0)[0] # 3
+#     eye_size_src = src_eyes[ONLY_EYES_IDX].max(dim=0)[0] - src_eyes[ONLY_EYES_IDX].min(dim=0)[0]  # 3
+#     eye_convert_scale = eye_size_src / eye_size_drv.clamp(min=1e-6)
+#     src_eye_width = src_eyes[LEFT_EYE_LANDMARK_IDX].max(dim=0)[0] - src_eyes[LEFT_EYE_LANDMARK_IDX].min(dim=0)[0]
+#     left_eye_center = (src_eyes[LEFT_EYE_LANDMARK_IDX].max(dim=0)[0] + src_eyes[LEFT_EYE_LANDMARK_IDX].min(dim=0)[0]) / 2
+#     right_eye_center = (src_eyes[RIGHT_EYE_LANDMARK_IDX].max(dim=0)[0] + src_eyes[RIGHT_EYE_LANDMARK_IDX].min(dim=0)[0]) / 2
 
-    delta_eye_drv = drv_eyes_rel - mean_drv_eyes_rel[None]
+#     delta_eye_drv = drv_eyes_rel - mean_drv_eyes_rel[None]
 
-    delta_pca = torch.load(opt.pca_path)
-    # delta_pca = torch.pca_lowrank(delta_eye_drv.flatten(1), q=5, niter=10) # u, s, v
-    # torch.save(delta_pca, f'pca_{time.time()}.pt')
-    delta_eye_proj_coef = (delta_eye_drv.flatten(1) @ delta_pca[2]) @ torch.diag(delta_pca[1]).inverse()
-    # print(f'PCA S: {delta_pca[1]}')
+#     delta_pca = torch.load(opt.pca_path)
+#     # delta_pca = torch.pca_lowrank(delta_eye_drv.flatten(1), q=5, niter=10) # u, s, v
+#     # torch.save(delta_pca, f'pca_{time.time()}.pt')
+#     delta_eye_proj_coef = (delta_eye_drv.flatten(1) @ delta_pca[2]) @ torch.diag(delta_pca[1]).inverse()
+#     # print(f'PCA S: {delta_pca[1]}')
 
-    k = 30
-    T = 0.3
-    delta_eye_proj_coef_nonlinear = k * (delta_eye_proj_coef ** 3)
-    # delta_eye_proj_coef = -k * (torch.exp(-delta_eye_proj_coef / T) - 1)
+#     k = 30
+#     T = 0.3
+#     delta_eye_proj_coef_nonlinear = k * (delta_eye_proj_coef ** 3)
+#     # delta_eye_proj_coef = -k * (torch.exp(-delta_eye_proj_coef / T) - 1)
 
-    ## smooth movement
-    filtered_items = []
-    for i in range(delta_eye_proj_coef_nonlinear.shape[1]):
-        filtered_item = torch.tensor(filter_values(delta_eye_proj_coef_nonlinear[:, i].numpy())).float()
-        filtered_items.append(filtered_item)
-    filtered_items = torch.stack(filtered_items, dim=1)
-    delta_eye_proj_coef_nonlinear = filtered_items
+#     ## smooth movement
+#     filtered_items = []
+#     for i in range(delta_eye_proj_coef_nonlinear.shape[1]):
+#         filtered_item = torch.tensor(filter_values(delta_eye_proj_coef_nonlinear[:, i].numpy())).float()
+#         filtered_items.append(filtered_item)
+#     filtered_items = torch.stack(filtered_items, dim=1)
+#     delta_eye_proj_coef_nonlinear = filtered_items
 
-    filtered_items = []
-    for i in range(delta_eye_proj_coef.shape[1]):
-        filtered_item = torch.tensor(filter_values(delta_eye_proj_coef[:, i].numpy())).float()
-        filtered_items.append(filtered_item)
-    filtered_items = torch.stack(filtered_items, dim=1)
-    delta_eye_proj_coef = filtered_items
+#     filtered_items = []
+#     for i in range(delta_eye_proj_coef.shape[1]):
+#         filtered_item = torch.tensor(filter_values(delta_eye_proj_coef[:, i].numpy())).float()
+#         filtered_items.append(filtered_item)
+#     filtered_items = torch.stack(filtered_items, dim=1)
+#     delta_eye_proj_coef = filtered_items
 
-    delta_eye_proj_coef_nonlinear = (delta_eye_proj_coef_nonlinear @ torch.diag(delta_pca[1]) @ delta_pca[2].t()).view(delta_eye_drv.shape)
-    delta_eye_proj = (delta_eye_proj_coef @ torch.diag(delta_pca[1]) @ delta_pca[2].t()).view(delta_eye_drv.shape)
+#     delta_eye_proj_coef_nonlinear = (delta_eye_proj_coef_nonlinear @ torch.diag(delta_pca[1]) @ delta_pca[2].t()).view(delta_eye_drv.shape)
+#     delta_eye_proj = (delta_eye_proj_coef @ torch.diag(delta_pca[1]) @ delta_pca[2].t()).view(delta_eye_drv.shape)
     
-    ### Disable PCA ###
-    # delta_eye_proj = delta_eye_drv
+#     ### Disable PCA ###
+#     # delta_eye_proj = delta_eye_drv
 
-    ### Disable Eye Size Scaling ###
-    eye_convert_scale[[0, 2]] = torch.ones_like(eye_convert_scale[[0, 2]])
+#     ### Disable Eye Size Scaling ###
+#     eye_convert_scale[[0, 2]] = torch.ones_like(eye_convert_scale[[0, 2]])
 
-    print(f'eye convert scale: {eye_convert_scale}')
-    delta_eye_drv_nonlinear = delta_eye_proj_coef_nonlinear
-    delta_eye_drv = delta_eye_proj
+#     print(f'eye convert scale: {eye_convert_scale}')
+#     delta_eye_drv_nonlinear = delta_eye_proj_coef_nonlinear
+#     delta_eye_drv = delta_eye_proj
     
-    eyes_drvn_rel = src_eyes_rel[None] + 0 * delta_eye_drv # B x n x 3
-    eyes_drvn_rel[:, UPPER_EYES_IDX] = src_eyes_rel[None][:, UPPER_EYES_IDX] + eye_convert_scale[None, None] * delta_eye_drv_nonlinear[:, UPPER_EYES_IDX]  # B x n x 3
-    eyes_drvn_rel[:, EYEBROW_LANDMARK_IDX] = src_eyes_rel[None][:, EYEBROW_LANDMARK_IDX] + 1 * delta_eye_drv[:, EYEBROW_LANDMARK_IDX]  # B x n x 3
-    eyes_drvn = torch.zeros_like(eyes_drvn_rel)
-    eyes_drvn[:, LEFT_PART_IDX] += src_eyes[None][:, LEFT_EYE_ANCHOR_IDX] + eyes_drvn_rel[:, LEFT_PART_IDX]
-    eyes_drvn[:, RIGHT_PART_IDX] += src_eyes[None][:, RIGHT_EYE_ANCHOR_IDX] + eyes_drvn_rel[:, RIGHT_PART_IDX]
+#     eyes_drvn_rel = src_eyes_rel[None] + 0 * delta_eye_drv # B x n x 3
+#     eyes_drvn_rel[:, UPPER_EYES_IDX] = src_eyes_rel[None][:, UPPER_EYES_IDX] + eye_convert_scale[None, None] * delta_eye_drv_nonlinear[:, UPPER_EYES_IDX]  # B x n x 3
+#     eyes_drvn_rel[:, EYEBROW_LANDMARK_IDX] = src_eyes_rel[None][:, EYEBROW_LANDMARK_IDX] + 1 * delta_eye_drv[:, EYEBROW_LANDMARK_IDX]  # B x n x 3
+#     eyes_drvn = torch.zeros_like(eyes_drvn_rel)
+#     eyes_drvn[:, LEFT_PART_IDX] += src_eyes[None][:, LEFT_EYE_ANCHOR_IDX] + eyes_drvn_rel[:, LEFT_PART_IDX]
+#     eyes_drvn[:, RIGHT_PART_IDX] += src_eyes[None][:, RIGHT_EYE_ANCHOR_IDX] + eyes_drvn_rel[:, RIGHT_PART_IDX]
     
-   ## iris_movement adaption
-    left_iris_move = eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX]
-    adapted_left_iris_move_x = adapt_values(left_eye_center[0], left_iris_move[:, 0, 0], rel_minimum=(-src_eye_width[0] / 12), rel_maximum=src_eye_width[0] / 12)
-    eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 0] = adapted_left_iris_move_x.unsqueeze(-1)
-    right_iris_move = eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX]
-    adapted_right_iris_move_x = adapt_values(right_eye_center[0], right_iris_move[:, 0, 0], rel_minimum=(-src_eye_width[0] / 24), rel_maximum=src_eye_width[0] / 24)
-    eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 0] = adapted_right_iris_move_x.unsqueeze(-1)
+#    ## iris_movement adaption
+#     left_iris_move = eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX]
+#     adapted_left_iris_move_x = adapt_values(left_eye_center[0], left_iris_move[:, 0, 0], rel_minimum=(-src_eye_width[0] / 12), rel_maximum=src_eye_width[0] / 12)
+#     eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 0] = adapted_left_iris_move_x.unsqueeze(-1)
+#     right_iris_move = eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX]
+#     adapted_right_iris_move_x = adapt_values(right_eye_center[0], right_iris_move[:, 0, 0], rel_minimum=(-src_eye_width[0] / 24), rel_maximum=src_eye_width[0] / 24)
+#     eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 0] = adapted_right_iris_move_x.unsqueeze(-1)
 
-    ## iris_movement adaption
-    left_iris_move = eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX]
-    adapted_left_iris_move_y = adapt_values(left_eye_center[1], left_iris_move[:, 0, 1], rel_minimum=(-src_eye_width[1] / 12), rel_maximum=src_eye_width[1] / 12)
-    eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 1] = adapted_left_iris_move_y.unsqueeze(-1)
-    right_iris_move = eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX]
-    adapted_right_iris_move_y = adapt_values(right_eye_center[1], right_iris_move[:, 0, 1], rel_minimum=(-src_eye_width[1] / 24), rel_maximum=src_eye_width[1] / 24)
-    eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 1] = adapted_right_iris_move_y.unsqueeze(-1)
+#     ## iris_movement adaption
+#     left_iris_move = eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX]
+#     adapted_left_iris_move_y = adapt_values(left_eye_center[1], left_iris_move[:, 0, 1], rel_minimum=(-src_eye_width[1] / 12), rel_maximum=src_eye_width[1] / 12)
+#     eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 1] = adapted_left_iris_move_y.unsqueeze(-1)
+#     right_iris_move = eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX]
+#     adapted_right_iris_move_y = adapt_values(right_eye_center[1], right_iris_move[:, 0, 1], rel_minimum=(-src_eye_width[1] / 24), rel_maximum=src_eye_width[1] / 24)
+#     eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 1] = adapted_right_iris_move_y.unsqueeze(-1)
 
 
-    ## iris_movement adaption
-    # eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 2] =  eyes_drvn[0, LEFT_IRIS_LANDMARK_IDX, 2].squeeze()
-    # eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 2] = eyes_drvn[0, RIGHT_IRIS_LANDMARK_IDX, 2].squeeze()
+#     ## iris_movement adaption
+#     # eyes_drvn[:, LEFT_IRIS_LANDMARK_IDX, 2] =  eyes_drvn[0, LEFT_IRIS_LANDMARK_IDX, 2].squeeze()
+#     # eyes_drvn[:, RIGHT_IRIS_LANDMARK_IDX, 2] = eyes_drvn[0, RIGHT_IRIS_LANDMARK_IDX, 2].squeeze()
 
-    ref_nose = driving_landmarks_from_flame[0][27:36]
-    for i, driving_landmark in enumerate(driving_landmarks_from_flame):
-        driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
-        # driven_pose_index = 0
-        mesh = {}
-        ROI_IDX = ROI_EYE_IDX + list(range(48, 68))
-        ROI_IDX = torch.tensor(ROI_IDX)
-        ROI_IDX_FLAME = ROI_IDX + from_flame_bias
+#     ref_nose = driving_landmarks_from_flame[0][27:36]
+#     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
+#         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
+#         # driven_pose_index = 0
+#         mesh = {}
+#         ROI_IDX = ROI_EYE_IDX + list(range(48, 68))
+#         ROI_IDX = torch.tensor(ROI_IDX)
+#         ROI_IDX_FLAME = ROI_IDX + from_flame_bias
 
-        target_landmarks = torch.tensor(source_landmarks['3d_landmarks']).float()
-        target_landmarks[ROI_IDX] = driving_landmark[ROI_IDX_FLAME]
+#         target_landmarks = torch.tensor(source_landmarks['3d_landmarks']).float()
+#         target_landmarks[ROI_IDX] = driving_landmark[ROI_IDX_FLAME]
 
-        # print(f'roi eye idx length: {len(ROI_EYE_IDX)}')
-        # print(f'eyes_drvn length: {len(eyes_drvn[0])}')
-        ### apply eye movement ###
-        # target_landmarks[ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
-        # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
+#         # print(f'roi eye idx length: {len(ROI_EYE_IDX)}')
+#         # print(f'eyes_drvn length: {len(eyes_drvn[0])}')
+#         ### apply eye movement ###
+#         # target_landmarks[ROI_EYE_IDX] = eyes_drvn[driven_pose_index]
+#         # target_landmarks[[3, 4]] = source_mesh['value'][[3, 4]] * SCALE
 
-        target_landmarks = driving_landmark
-        target_landmarks[27:36] = ref_nose
-        # mesh['value'] = source_mesh['value']
-        mesh['value'] = target_landmarks.float() / SCALE
-        mesh['raw_value'] = torch.tensor(source_landmarks['3d_landmarks_pose'])
+#         target_landmarks = driving_landmark
+#         target_landmarks[27:36] = ref_nose
+#         # mesh['value'] = source_mesh['value']
+#         mesh['value'] = target_landmarks.float() / SCALE
+#         mesh['raw_value'] = torch.tensor(source_landmarks['3d_landmarks_pose'])
 
-        if relative_headpose:
+#         if relative_headpose:
             
-            ### manipulate head pose ###
-            driving_pose = driving_landmarks[driven_pose_index]['he_p']
+#             ### manipulate head pose ###
+#             driving_pose = driving_landmarks[driven_pose_index]['he_p']
 
-            rot_src = pose_p['view'].copy()
-            trans_src = pose_p['viewport'].copy()
+#             rot_src = pose_p['view'].copy()
+#             trans_src = pose_p['viewport'].copy()
 
-            r = R.from_matrix(rot_src[:3, :3])
-            MAX_ROT = np.pi / 3
-            angle_x = 0
-            angle_y = 0
-            angle_z = 0
-            delta_angle = np.array([angle_x, angle_y, angle_z])
-            delta_r = R.from_rotvec(delta_angle)
-            final_r = delta_r.as_matrix() @ r.as_matrix()
+#             r = R.from_matrix(rot_src[:3, :3])
+#             MAX_ROT = np.pi / 3
+#             angle_x = 0
+#             angle_y = 0
+#             angle_z = 0
+#             delta_angle = np.array([angle_x, angle_y, angle_z])
+#             delta_r = R.from_rotvec(delta_angle)
+#             final_r = delta_r.as_matrix() @ r.as_matrix()
         
-            # use driving R
-            final_r = driving_pose['R']
-            rot_src[:3, :3] = final_r
+#             # use driving R
+#             final_r = driving_pose['R']
+#             rot_src[:3, :3] = final_r
             
-            final_r = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, :3]
+#             final_r = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, :3]
             
-            mesh['R'] = final_r
+#             mesh['R'] = final_r
 
-            trans_x = 0
-            trans_y = 0
-            trans_z = 0
-            final_trans = np.array([trans_x, trans_y, trans_z])
+#             trans_x = 0
+#             trans_y = 0
+#             trans_z = 0
+#             final_trans = np.array([trans_x, trans_y, trans_z])
 
-            # use driving trans
-            final_trans = driving_pose['t'][:3]
-            print(f'final_trans: {final_trans}')
-            final_trans = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, 3]
-            # print(f'pose_idx: {driven_pose_index}')
-            # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
-            mesh['t'] = final_trans
-            mesh['viewport'] = driving_landmarks[driven_pose_index]['p']['viewport'].copy()
-            mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj'].copy()
-            mesh['view'] = driving_landmarks[driven_pose_index]['p']['view'].copy()
-        else:
-            mesh['U'] = driving_Us[i]
+#             # use driving trans
+#             final_trans = driving_pose['t'][:3]
+#             print(f'final_trans: {final_trans}')
+#             final_trans = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, 3]
+#             # print(f'pose_idx: {driven_pose_index}')
+#             # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
+#             mesh['t'] = final_trans
+#             mesh['viewport'] = driving_landmarks[driven_pose_index]['p']['viewport'].copy()
+#             mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj'].copy()
+#             mesh['view'] = driving_landmarks[driven_pose_index]['p']['view'].copy()
+#         else:
+#             mesh['U'] = driving_Us[i]
             
-        mesh['scale'] = SCALE
+#         mesh['scale'] = SCALE
         
-        driving_meshes.append(mesh)
+#         driving_meshes.append(mesh)
 
 
-    # use one euro filter for denoising
-    if relative_headpose:
-        filter_mesh(driving_meshes, source_mesh, SCALE)
-    target_meshes = []
+#     # use one euro filter for denoising
+#     if relative_headpose:
+#         filter_mesh(driving_meshes, source_mesh, SCALE)
+#     target_meshes = []
 
     ## split inputs
     # NODES = len(gpu_list)
     NODES = 1
     data_per_node = math.ceil(len(driving_meshes) / NODES)
 
-    for mesh in driving_meshes:
-        raw_mesh = torch.cat([mesh['value'] * SCALE, torch.ones(mesh['value'].shape[0], 1)], dim=1).matmul(mesh['U']).int()
-        mesh['raw_mesh'] = raw_mesh
-        # mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
-        target_meshes.append(SCALE * (mesh['value'][17:] + 1))
+    # for mesh in driving_meshes:
+    #     raw_mesh = torch.cat([mesh['value'] * SCALE, torch.ones(mesh['value'].shape[0], 1)], dim=1).matmul(mesh['U']).int()
+    #     mesh['raw_mesh'] = raw_mesh
+    #     # mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
+    #     target_meshes.append(SCALE * (mesh['value'][17:] + 1))
 
     # que = mp.Manager().Queue()
 
@@ -1011,21 +1073,26 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     
     # mesh styling
     meshed_frames = []
-
-    source_mesh_value = (source_mesh['value'][17:] + 1) * SCALE
+    # mesh_frames = []
+    # source_mesh_value = (source_mesh['value'][17:] + 1) * SCALE
     for i, frame in enumerate(predictions):
         frame = np.ascontiguousarray(img_as_ubyte(frame))
         # if i >= len(target_meshes):
         #     continue
         # mesh = target_meshes[i]
-        # frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
+        # paper = np.zeros_like(frame)
+        # reversed_mesh = mesh.numpy().copy()
+        # reversed_mesh[:, 1] = 2 * SCALE - reversed_mesh[:, 1]
+        # paper = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=paper)
         # frame = draw_section(source_mesh_value[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
         meshed_frames.append(frame)
+        # mesh_frames.append(paper)
 
     predictions = meshed_frames
 
     imageio.mimsave(os.path.join(opt.result_dir, opt.result_video), predictions, fps=fps)
-    
+    # imageio.mimsave(os.path.join(opt.result_dir, 'mesh_video.mp4'), mesh_frames, fps=fps)
+
     if save_frames:
         for i, frame in enumerate(meshed_frames):
             imageio.imwrite(os.path.join(opt.result_dir, 'frames', '{:05d}.png'.format(i)), frame)

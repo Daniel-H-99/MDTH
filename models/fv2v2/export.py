@@ -1045,18 +1045,18 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         # if i >= len(target_meshes):
         #     continue
         # mesh = target_meshes[i]
-        paper = np.zeros_like(frame)
-        reversed_mesh = mesh.numpy().copy()
-        reversed_mesh[:, 1] = 2 * SCALE - reversed_mesh[:, 1]
-        paper = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=paper)
+        # paper = np.zeros_like(frame)
+        # reversed_mesh = mesh.numpy().copy()
+        # reversed_mesh[:, 1] = 2 * SCALE - reversed_mesh[:, 1]
+        # paper = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=paper)
         # frame = draw_section(source_mesh_value[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
         meshed_frames.append(frame)
-        mesh_frames.append(paper)
+        # mesh_frames.append(paper)
 
     predictions = meshed_frames
 
     imageio.mimsave(os.path.join(opt.result_dir, opt.result_video), predictions, fps=fps)
-    imageio.mimsave(os.path.join(opt.result_dir, 'mesh_video.mp4'), mesh_frames, fps=fps)
+    # imageio.mimsave(os.path.join(opt.result_dir, 'mesh_video.mp4'), mesh_frames, fps=fps)
 
     if save_frames:
         for i, frame in enumerate(meshed_frames):

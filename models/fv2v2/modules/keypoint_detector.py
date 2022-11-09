@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree, ResnetEncoder, AdaIn
+from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree, ResnetEncoder, AdaIn, LSTMEncoder
 
 class KPDetector(nn.Module):
     """
@@ -218,43 +218,45 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, lstm_num_layer=1, lstm_hidden_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_heads = num_heads
         self.num_kp = num_kp
         self.input_dim = input_dim
         self.latent_dim = latent_dim
-        
+        self.lstm_num_layer = lstm_num_layer
+        self.lstm_hidden_dim = lstm_hidden_dim
         self.id_encoder = MeshEncoder(n_vertices=478, num_kp=self.num_kp, latent_dim=latent_dim)
         self.kp_decoder = nn.Sequential(
             nn.Linear(self.latent_dim, self.num_kp * 3),
             nn.Tanh()
         )
 
-        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 478, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 478, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 478, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=2)
+        self.delta_exp_extractor_from_mesh = LSTMEncoder(input_dim=3 * 478, hidden_dim=self.lstm_hidden_dim, output_dim=self.num_heads, num_layer=self.lstm_num_layer)
         self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=3)
+        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=2)
         
         init.constant_(self.delta_heads_pre_scale, 0)
         init.constant_(self.delta_heads_post_scale, 0)
         # latent_dim = 2048
         
-    def encode(self, x, placeholder=['kp', 'delta_code']):
+    def encode(self, x, placeholder=['kp', 'delta']):
         output = {}
         if 'kp' in placeholder:
-            id_embedding = self.id_encoder(x['mesh'])
+            # print(f'x mesh shape: {x["mesh"].shape}')
+            id_embedding = self.id_encoder(x['mesh'][:, 2])
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
             output['kp'] = id_embedding
             
-        if 'delta_code' in placeholder:
-            mesh_flattened = x['mesh'].flatten(1)
-            style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
-            exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
+        if 'delta' in placeholder:
+            mesh_flattened = x['mesh'].flatten(2)
+            style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened[:, 2])
+            exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened)
             
             delta_style_code = style_from_mesh
             delta_exp_code = F.tanh(torch.exp(self.delta_heads_pre_scale / 10).unsqueeze(0).squeeze(2) * exp_from_mesh)
@@ -278,7 +280,7 @@ class ExpTransformer(nn.Module):
     
         return res
 
-    def forward(self, src, drv, placeholder=['kp', 'delta_code']):
+    def forward(self, src, drv, placeholder=['kp', 'delta']):
         src_embedding = self.encode(src, placeholder=placeholder)
         drv_embedding = self.encode(drv, placeholder=placeholder)
 
@@ -292,7 +294,7 @@ class ExpTransformer(nn.Module):
             output['src_kp'] = src_output['kp']
             output['drv_kp'] = drv_output['kp']
                   
-        if 'delta_code' in placeholder:
+        if 'delta' in placeholder:
             output['src_delta'] = src_output['delta']
             output['drv_delta'] = drv_output['delta']
             

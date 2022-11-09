@@ -98,7 +98,7 @@ train_params:
     localized: [0, 0, 0, 0, 0, 0, 0, 0, 0]
     style: 0
     id_cls: 10
-    l1: 10
+    l1: 0
 
 visualizer_params:
   kp_size: 5

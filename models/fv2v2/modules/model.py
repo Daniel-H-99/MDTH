@@ -1265,8 +1265,9 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             p.requires_grad = True
 
         generator.train()
-        for p in generator.parameters():
-            p.requires_grad = True
+        for name, p in generator.named_parameters():
+            if 'dense' in name or 'resblocks_2d' in name or 'up_blocks' in name or 'final' in name: 
+                p.requires_grad = True
 
         self.stage = stage
 

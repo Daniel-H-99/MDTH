@@ -27,7 +27,7 @@ from modules.keypoint_detector import HEEstimator, ExpTransformer, KPDetector
 from modules.landmark_model import LandmarkModel
 from modules.generator import OcclusionAwareSPADEGenerator
 from sync_batchnorm import DataParallelWithCallback
-from utils.util import OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, extract_mesh, draw_section, draw_mouth_mask, get_mesh_image, matrix2euler, euler2matrix, RIGHT_IRIS_IDX, LEFT_IRIS_IDX, extract_mesh, OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX, OPENFACE_NOSE_IDX
+from utils.util import OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, extract_mesh_normalize, draw_section, draw_mouth_mask, get_mesh_image, matrix2euler, euler2matrix, RIGHT_IRIS_IDX, LEFT_IRIS_IDX, extract_mesh, OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX, OPENFACE_NOSE_IDX
 from utils.one_euro_filter import OneEuroFilter
 from ffhq_align import image_align
 ###############################################################
@@ -574,7 +574,6 @@ def get_rotation_matrix(yaw, pitch, roll):
 
     return rot_mat
 
-
 def keypoint_transformation(kp_canonical, mesh):
     device = kp_canonical['value'].device
     
@@ -583,14 +582,32 @@ def keypoint_transformation(kp_canonical, mesh):
     else:
         kp_normed = kp_canonical['value']
         
-    tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
-    tmp = tmp.matmul(mesh['U']) # B x N x 4
-    tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    tmp[:, :, 2] = tmp[:, :, 2] / 5
+    tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device)], dim=2) # B x N x 4
+    tmp = tmp.matmul(mesh['denormalizer'].transpose(1, 2))[:, :, :3] # B x N x 3
+    # tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    tmp[:, :, 2] = tmp[:, :, 2]
     kp_transformed = tmp # B x N x 3
+    
+
+    return {'value': kp_transformed, 'normed': kp_normed}         
+    
+    
+# def keypoint_transformation(kp_canonical, mesh):
+#     device = kp_canonical['value'].device
+    
+#     if 'delta' in mesh:
+#         kp_normed = kp_canonical['value'] + mesh['delta']
+#     else:
+#         kp_normed = kp_canonical['value']
+        
+#     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
+#     tmp = tmp.matmul(mesh['U']) # B x N x 4
+#     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+#     tmp[:, :, 2] = tmp[:, :, 2] / 5
+#     kp_transformed = tmp # B x N x 3
 
 
-    return {'value': kp_transformed, 'normed': kp_normed}   
+#     return {'value': kp_transformed, 'normed': kp_normed}   
 
 def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, kp_extractor, he_estimator, use_transformer=True, extract_driving_code=False, que=None, stage=1):
     # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
@@ -620,6 +637,8 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
 
         _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
 
+        print(f'source mesh:{source_mesh["value"].shape}')
+
         assert len(driving_meshes) == len(driving_video)
         for frame_idx in tqdm(range(0, len(driving_meshes), bs)):
             driving_frame = driving_video[frame_idx:frame_idx+bs].to(device)
@@ -636,7 +655,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
-            tf_output = exp_transformer({'mesh': _source_mesh['value']}, {'mesh': _driving_mesh['value']})
+            tf_output = exp_transformer({'mesh': _source_mesh['value']}, {'mesh': _driving_mesh['value']}, placeholder=['kp'])
 
             src_embedding = tf_output['src_embedding']
             drv_embedding = tf_output['drv_embedding']
@@ -704,6 +723,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
+    ref_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
+    ref = torch.load(ref_path)
     # config['train_params']['num_kp'] = config['model_params']['common_params']['num_kp']
     # config['train_params']['sections'] = config['model_params']['common_params']['sections']
 
@@ -736,11 +757,12 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         while True:
             try:
                 driving_frame = imageio.imread(cached_path)
+                # print(f'image loaded')
                 L = driving_frame.shape[0]
                 A = torch.tensor([[-1, -1, 0]]).float() # 3 x 1
-                driving_mesh = extract_mesh_normalize(img_as_ubyte(driving_frame))
+                driving_mesh = extract_mesh_normalize(img_as_ubyte(driving_frame), ref)
                 driving_mesh['value'] = driving_mesh['value'] * 2 / L + A
-                drivin_meshes.append(driving_mesh)
+                driving_meshes.append(driving_mesh)
                 break
             except:
                 vid_id = os.path.basename(opt.driving_dir)
@@ -762,7 +784,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     # print(f'driving_video shape: {driving_video.shape}')
     driving_video = driving_video.permute(0, 3, 1, 2).float()
 
-    driving_meshes = [drivin_meshes[i] for i in order]
+    driving_meshes = [driving_meshes[i] for i in order]
     
     ### stage2
     # driving_meshs = preprocess_driving_meshes(driving_meshes)
@@ -780,7 +802,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     source_meshes = []
     if opt.source_dir.endswith('.mp4'):
-        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '00000.png'))
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '0000000.png'))
     else:
         source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
@@ -789,7 +811,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     L = source_image.shape[0]
     A = torch.tensor([[-1, -1, 0]]).float() # 3 x 1
-    source_mesh = extract_mesh_normalize(img_as_ubyte(source_image))
+    source_mesh = extract_mesh_normalize(img_as_ubyte(source_image), ref)
     source_mesh['value'] = source_mesh['value'] * 2 / L + A
     source_meshes.append(source_mesh)
 
@@ -1032,19 +1054,19 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 #     # use one euro filter for denoising
 #     if relative_headpose:
 #         filter_mesh(driving_meshes, source_mesh, SCALE)
-#     target_meshes = []
+    target_meshes = []
 
     ## split inputs
     # NODES = len(gpu_list)
     NODES = 1
     data_per_node = math.ceil(len(driving_meshes) / NODES)
 
-    # for mesh in driving_meshes:
+    for mesh in driving_meshes:
     #     raw_mesh = torch.cat([mesh['value'] * SCALE, torch.ones(mesh['value'].shape[0], 1)], dim=1).matmul(mesh['U']).int()
     #     mesh['raw_mesh'] = raw_mesh
     #     # mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
-    #     target_meshes.append(SCALE * (mesh['value'][17:] + 1))
-
+        target_meshes.append(128 * (mesh['value'] + 1))
+        # mesh['value'] = source_mesh['value']
     # que = mp.Manager().Queue()
 
     # mp.set_start_method('spawn', force=True)
@@ -1079,11 +1101,11 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         frame = np.ascontiguousarray(img_as_ubyte(frame))
         # if i >= len(target_meshes):
         #     continue
-        # mesh = target_meshes[i]
+        mesh = target_meshes[i]
         # paper = np.zeros_like(frame)
         # reversed_mesh = mesh.numpy().copy()
         # reversed_mesh[:, 1] = 2 * SCALE - reversed_mesh[:, 1]
-        # paper = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=paper)
+        # frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, mask=frame)
         # frame = draw_section(source_mesh_value[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
         meshed_frames.append(frame)
         # mesh_frames.append(paper)

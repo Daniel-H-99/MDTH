@@ -65,7 +65,7 @@ model_params:
     sn: True
 
 train_params:
-  num_epochs: 600
+  num_epochs: 1200
   num_repeats: 1
   epoch_milestones: [180,]
   lr_generator: 2.0e-4
@@ -90,9 +90,9 @@ train_params:
     perceptual: [10, 10, 10, 10, 10]
     equivariance_value: 0
     equivariance_jacobian: 0    # 10
-    keypoint: 10
+    keypoint: 0
     headpose: 0
-    motion_match: 0
+    motion_match: 100
     log: 0
     expression: 0
     localized: [0, 0, 0, 0, 0, 0, 0, 0, 0]

@@ -85,6 +85,10 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
             losses_generator.update(losses_discriminator)
             losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
             logger.log_ground(losses=losses, inp=x, out=generated)
+            print(f"source_keypoints: {generated['kp_source']['value'][0]}")
+            print(f"driving_keypoints: {generated['kp_driving']['value'][0]}")
+            # while True:
+            #     continue
             del losses
             del generated
         print(f'start training...')

@@ -391,7 +391,7 @@ def draw_section(sections, shape, section_config=[LEFT_EYEBROW_IDX, LEFT_EYE_IDX
         mask = np.zeros(shape, dtype=np.uint8)
         
     if len(sections) == 478:
-        return get_mesh_image(torch.tensor(sections), shape)
+        return get_mesh_image(torch.tensor(sections), shape, mask=mask)
     
     # united section
     # groups = [0] * len(groups)
@@ -453,7 +453,7 @@ def get_lip_mask(mesh_dict, shape, boundary_idx=WIDE_BOUNDARY_IDX):
     lip_mask = draw_mask(keypoints, shape)
     return lip_mask
 
-def get_mesh_image(mesh, frame_shape, mask_idx=None):
+def get_mesh_image(mesh, frame_shape, mask_idx=None, mask=None):
     mesh_dict = mesh_tensor_to_landmarkdict(mesh)
     image_rows, image_cols = frame_shape[1], frame_shape[0]
     drawing_spec = mp_drawing.DrawingSpec(color= mp_drawing.BLACK_COLOR, thickness=1, circle_radius=1)
@@ -468,8 +468,11 @@ def get_mesh_image(mesh, frame_shape, mask_idx=None):
             idx_to_coordinates[idx] = landmark_px
     
     # get segment map
-    segmap = get_seg(mesh_dict, (image_cols, image_rows, 3)) * 32
-
+    if mask is None:    
+        segmap = get_seg(mesh_dict, (image_cols, image_rows, 3)) * 32
+    else:
+        segmap = mask
+        
     # draw mesh
     connections = mp_face_mesh.FACEMESH_TESSELATION
     for edge_index, connection in enumerate(connections):

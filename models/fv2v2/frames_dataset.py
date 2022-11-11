@@ -100,7 +100,7 @@ class FramesDataset3(Dataset):
         self.id_sampling = True
         self.z_bias = z_bias
         self.landmark_model = LandmarkModel(landmarkmodel_path)
-        self.reference_dict = torch.load('/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/exp_check_mp_stability/reference_mesh.pt')
+        self.reference_dict = torch.load('/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt')
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))

@@ -178,7 +178,7 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['denormalizer'].transpose(1, 2))[:, :, :3] # B x N x 3
     # tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    tmp[:, :, 2] = tmp[:, :, 2] / 5
+    tmp[:, :, 2] = tmp[:, :, 2]
     kp_transformed = tmp # B x N x 3
     
     
@@ -187,7 +187,7 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([tmp, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['denormalizer'].transpose(1, 2))[:, :, :3] # B x N x 3
     # tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    tmp[:, :, 2] = tmp[:, :, 2] / 5
+    tmp[:, :, 2] = tmp[:, :, 2]
 
     kp_canonical_transformed = tmp # B x N x 3
 
@@ -619,15 +619,15 @@ class GeneratorFullModelWithTF(torch.nn.Module):
             for i in range(kp_driving['value'].shape[1]):
                 for j in range(kp_driving['value'].shape[1]):
                     dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
-                    dist = 0.1 - dist      # set Dt = 0.1
+                    dist = - 0.1 + dist      # set Dt = 0.1
                     dd = torch.gt(dist, 0) 
                     value = (dist * dd).mean()
                     value_total += value
 
             kp_mean_depth = kp_driving['value'][:, :, -1].mean(-1)
-            value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
+            # value_depth = torch.abs(kp_mean_depth - 0.33).mean()          # set Zt = 0.33
 
-            value_total += value_depth
+            # value_total += value_depth
             loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
 
         if self.loss_weights['headpose'] != 0:
@@ -1365,10 +1365,10 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w
                 it_section = driving_mesh['raw_value'] # B x N x 3
                 motion_GT = source_mesh['raw_value'] # B x N x 3
-                it_section_eye = it_section[:, source_mesh['OPENFACE_EYE_IDX'][0].long()]
-                motion_GT_eye = motion_GT[:, source_mesh['OPENFACE_EYE_IDX'][0].long()]
-                it_section_mouth = it_section[:, source_mesh['OPENFACE_LIP_IDX'][0].long()]
-                motion_GT_mouth = motion_GT[:, source_mesh['OPENFACE_LIP_IDX'][0].long()]
+                it_section_eye = it_section[:, source_mesh['MP_EYE_SECTIONS'][0].long()]
+                motion_GT_eye = motion_GT[:, source_mesh['MP_EYE_SECTIONS'][0].long()]
+                it_section_mouth = it_section[:, source_mesh['MP_MOUTH_SECTIONS'][0].long()]
+                motion_GT_mouth = motion_GT[:, source_mesh['MP_MOUTH_SECTIONS'][0].long()]
                 # print(f'it section shape: {it_section.shape}')
                 # print(f'motion_GT section shape: {motion_GT.shape}')
                 # print(f'motion shape: {motion.shape}')
@@ -1387,7 +1387,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'motion_section_GT : {motion_GT}')
                 
                 loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
-                                                + 10 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
+                                                + 0 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
                                                 + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
 
             if np.array(self.loss_weights['localized']).sum() != 0:
@@ -1494,7 +1494,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 for i in range(kp_canonical['value'].shape[1]):
                     for j in range(kp_canonical['value'].shape[1]):
                         dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
-                        dist = 0.1 - dist      # set Dt = 0.1
+                        dist =  -3.0 + dist      # set Dt = 0.1
                         dd = torch.gt(dist, 0) 
                         value = (dist * dd).mean()
                         value_total += value

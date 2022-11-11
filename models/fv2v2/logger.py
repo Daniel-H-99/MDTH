@@ -153,6 +153,10 @@ class Visualizer:
         image_array = np.array([self.draw_image_with_kp(v, k) for v, k in zip(images, kp)])
         return self.create_image_column(image_array)
 
+    def create_image_column_with_mesh(self, images, mesh):
+        image_array = np.array([self.draw_image_with_kp(v, k) for v, k in zip(images, kp)])
+        return self.create_image_column(image_array)
+
     def create_image_column(self, images):
         if self.draw_border:
             images = np.copy(images)
@@ -164,7 +168,10 @@ class Visualizer:
         out = []
         for arg in args:
             if type(arg) == tuple:
-                out.append(self.create_image_column_with_kp(arg[0], arg[1]))
+                if len(arg) == 2:
+                    out.append(self.create_image_column_with_kp(arg[0], arg[1]))
+                elif len(arg) == 3:
+                    out.append(self.create_image_column_with_mesh(arg[0], arg[1]))
             else:
                 out.append(self.create_image_column(arg))
         return np.concatenate(out, axis=1)
@@ -182,7 +189,12 @@ class Visualizer:
             # Source image with keypoints
             kp_source_canonical = out['source_kp_canonical']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
             images.append((source, kp_source_canonical))
-        
+
+        # if 'raw_value' in out['kp_source']:
+        #     # Source image with keypoints
+        #     mesh_source = out['kp_source']['raw_value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
+        #     images.append((source, mesh_source, True))
+
         # Equivariance visualization
         if 'transformed_frame' in out:
             transformed = out['transformed_frame'].data.cpu().numpy()
@@ -200,7 +212,17 @@ class Visualizer:
             # Source image with keypoints
             kp_driving_canonical = out['driving_kp_canonical']['value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
             images.append((driving, kp_driving_canonical))
-            
+
+        # if 'raw_value' in out['kp_driving']:
+        #     # Source image with keypoints
+        #     mesh_driving = out['kp_driving']['raw_value'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
+        #     images.append((driving, mesh_driving, True))
+
+        # if 'raw_value_driven' in out['kp_driving']:
+        #     # Source image with keypoints
+        #     mesh_driving = out['kp_driving']['raw_value_driven'][:, :, :2].data.cpu().numpy()     # 3d -> 2d
+        #     images.append((driving, mesh_driving, True))
+
         # Result
         prediction = out['prediction'].data.cpu().numpy()
         prediction = np.transpose(prediction, [0, 2, 3, 1])

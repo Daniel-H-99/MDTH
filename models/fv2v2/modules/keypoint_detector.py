@@ -267,7 +267,7 @@ class ExpTransformer(nn.Module):
         res = {}
         if 'kp' in embedding:
             res['kp'] = 1 * self.kp_decoder(embedding['kp']).view(len(embedding['kp']), -1, 3)
-            res['kp'][:, :, 2] = res['kp'][:, :, 2] - 0.33
+            # res['kp'][:, :, 2] = res['kp'][:, :, 2] + 0.33
             
         if 'delta_style_code' in embedding and 'delta_exp_code' in embedding:
             x =  self.delta_exp_code_decoder(torch.exp(self.delta_heads_post_scale / 10).unsqueeze(0).squeeze(2) * embedding['delta_exp_code']) # B x num_heads

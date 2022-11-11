@@ -9,17 +9,22 @@ module_dir = '/home/server19/minyeong_workspace/MDTH/models/fv2v2'
 sys.path.append(module_dir)
 
 import utils
-from utils.util import extract_mesh, mesh_tensor_to_landmarkdict
+from utils.util import extract_mesh_normalize, mesh_tensor_to_landmarkdict
 
-path = '/mnt/hdd/minyeong_workspace/Experiment/data/celeb/E_00001_cropped.png' ### suhyeon kim's frontalized face
+path = '/mnt/hdd/minyeong_workspace/Experiment/data/celeb/E_00002_cropped.png' ### suhyeon kim's frontalized face
 
 img = img_as_ubyte(imageio.imread(path))
 
-mesh_tensor = extract_mesh(img)['raw_value']
+# mesh_tensor = extract_mesh(img)['raw_value']
 
-mesh_dict = mesh_tensor_to_landmarkdict(mesh_tensor)
+# mesh_dict = mesh_tensor_to_landmarkdict(mesh_tensor)
 
-save_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/exp_check_mp_statbility/reference_mesh.pt'
+ref_dict = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
+ref = torch.load(ref_dict)
+
+mesh_dict  = extract_mesh_normalize(img, ref)
+
+save_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/rhs_mesh.pt'
 
 torch.save(mesh_dict, save_path)
 

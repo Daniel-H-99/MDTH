@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree, ResnetEncoder, AdaIn
-
 class KPDetector(nn.Module):
     """
     Detecting canonical keypoints. Return keypoint position and jacobian near each keypoint.
@@ -225,7 +224,7 @@ class ExpTransformer(nn.Module):
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         
-        self.id_encoder = MeshEncoder(num_kp=self.num_kp, latent_dim=latent_dim)
+        self.id_encoder = MeshEncoder(n_vertices=106, num_kp=self.num_kp, latent_dim=latent_dim)
         self.kp_decoder = nn.Sequential(
             nn.Linear(self.latent_dim, self.num_kp * 3),
             nn.Tanh()
@@ -233,8 +232,8 @@ class ExpTransformer(nn.Module):
 
 
 
-        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 68, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 51, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
         self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
@@ -248,15 +247,16 @@ class ExpTransformer(nn.Module):
         
     def encode(self, x, placeholder=['kp', 'delta_code']):
         output = {}
+        processed_mesh = torch.cat([x['mesh']['value'][OPENFACE_ROI_IDX] , x['mesh']['mp_value'][MP_ROI_IDX]], dim=1)
         if 'kp' in placeholder:
-            id_embedding = self.id_encoder(x['mesh'])
+            id_embedding = self.id_encoder(processed_mesh)
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
             output['kp'] = id_embedding
             
         if 'delta_code' in placeholder:
-            mesh_flattened = x['mesh'].flatten(1)
+            mesh_flattened = processed_mesh.flatten(1)
             style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
-            exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened[:, 17 * 3:])
+            exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened)
             
             delta_style_code = style_from_mesh
             delta_exp_code = F.tanh(torch.exp(self.delta_heads_pre_scale / 10).unsqueeze(0).squeeze(2) * exp_from_mesh)

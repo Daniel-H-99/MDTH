@@ -19,7 +19,7 @@ from sklearn.model_selection import train_test_split
 from imageio import mimread
 import imageio
 import time 
-from utils.util import extract_mesh, get_mesh_image, draw_section, draw_mouth_mask, OPENFACE_EYE_IDX, OPENFACE_LIP_IDX, LEFT_EYE_IDX, LEFT_EYEBROW_IDX,LEFT_IRIS_IDX, RIGHT_EYE_IDX, RIGHT_EYEBROW_IDX, RIGHT_IRIS_IDX, IN_LIP_IDX, OUT_LIP_IDX
+from utils.util import extract_mesh_normalize, get_mesh_image, draw_section, draw_mouth_mask, OPENFACE_EYE_IDX, OPENFACE_LIP_IDX, LEFT_EYE_IDX, LEFT_EYEBROW_IDX,LEFT_IRIS_IDX, RIGHT_EYE_IDX, RIGHT_EYEBROW_IDX, RIGHT_IRIS_IDX, IN_LIP_IDX, OUT_LIP_IDX, OPENFACE_OVAL_IDX
 import torch
 from modules.landmark_model import LandmarkModel
 
@@ -100,6 +100,9 @@ class FramesDataset3(Dataset):
         self.id_sampling = True
         self.z_bias = z_bias
         self.landmark_model = LandmarkModel(landmarkmodel_path)
+        self.ref_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
+        self.ref = torch.load(self.ref_path)
+        
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))
@@ -241,9 +244,10 @@ class FramesDataset3(Dataset):
                     A = np.array([[-1, -1, 0]], dtype='float32') # 3 x 1
                     # mesh = {}
 
-                    mesh_mp = extract_mesh(img_as_ubyte(frame))
-                    right_iris = mesh_mp['raw_value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
-                    left_iris = mesh_mp['raw_value'][LEFT_IRIS_IDX].mean(dim=0) # 3
+                    mesh_mp = extract_mesh_normalize(img_as_ubyte(frame), self.ref)
+                    mesh_mp['value'] = mesh_mp['value'] * 2 / L + A
+                    # right_iris = mesh_mp['value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
+                    # left_iris = mesh_mp['value'][LEFT_IRIS_IDX].mean(dim=0) # 3
                     # print(f'right_iris shape: {right_iris.shape}')
                     # mesh['value'][3] = (normalizer(right_iris[None].numpy().astype(np.float32)) / (L // 2))
                     # mesh['value'][4] = (normalizer(left_iris[None].numpy().astype(np.float32)) / (L // 2))
@@ -251,8 +255,7 @@ class FramesDataset3(Dataset):
                     # print(f'right_iris: {mesh["value"][3]}')
                     # print(f'right_eye: {mesh["value"][36:42].mean(axis=0)}')
                     # mesh_mp['raw_value'][:, 2] = mesh_mp['raw_value'][:, 2]
-                    mesh_mp['_raw_value'] = mesh_mp['raw_value'].clone().detach()
-
+                    # mesh_mp['_raw_value'] = mesh_mp['raw_value'].clone().detach()
 
                     # if noise is not None:
                     #     mesh_mp['raw_value'][RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX] += torch.tensor(noise[[0]])
@@ -275,10 +278,12 @@ class FramesDataset3(Dataset):
                     # mesh['mesh_img'] = (get_mesh_image(mesh['raw_value'], self.frame_shape)[:, :, [0]] / 255.0).transpose((2, 0, 1))
                     MP_SECTIONS_CONFIG = [LEFT_EYEBROW_IDX, LEFT_EYE_IDX, LEFT_IRIS_IDX, RIGHT_EYEBROW_IDX, RIGHT_EYE_IDX, RIGHT_IRIS_IDX, OUT_LIP_IDX, IN_LIP_IDX]
                     MP_SECTIONS =  LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX + OUT_LIP_IDX + IN_LIP_IDX
+                    MP_EYE_SECTIONS =  LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX
 
                     mesh['MP_SECTIONS'] = MP_SECTIONS
-                    mesh['MP_EYE_SECTIONS'] = LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX
+                    mesh['MP_EYE_SECTIONS'] = MP_EYE_SECTIONS
                     mesh['MP_MOUTH_SECTIONS'] = OUT_LIP_IDX + IN_LIP_IDX
+                    mesh['MP_ROI_IDX'] = MP_EYE_SECTIONS
                     
                     mesh['mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
                     mesh['_mesh_img_sec'] =  np.zeros_like(self.get_mesh_image_section(mesh_mp['_raw_value'].numpy(), section_config=MP_SECTIONS_CONFIG))
@@ -288,6 +293,7 @@ class FramesDataset3(Dataset):
                     # print('msh img sec got')
                     # print(f'mp sections: {MP_SECTIONS}')
                     # print(f'mesh mp shape: {mesh_mp["raw_value"].shape}')
+                    mesh['mp_value'] = mesh_mp['value']
                     mesh['section_landmarks'] = mesh_mp["raw_value"][MP_SECTIONS] * 2 / L + A
                     # mesh['mouth_img'] = self.get_mouth_image(mesh['raw_value'].numpy())
                     # print(f'mouth image shape: {mesh["mouth_img"].shape}')
@@ -303,6 +309,7 @@ class FramesDataset3(Dataset):
                     mesh['raw_value'] = np.array(mesh['raw_value'], dtype='float32') * 2 / L + A
                     mesh['OPENFACE_EYE_IDX'] = OPENFACE_EYE_IDX
                     mesh['OPENFACE_LIP_IDX'] = OPENFACE_LIP_IDX
+                    mesh['OPENFACE_ROI_IDX'] = OPENFACE_OVAL_IDX + OPENFACE_NOSE_IDX + OPENFACE_LIP_IDX
                     
                     # print('checkpoint 2')
                     # print(f'data type: {mesh["value"].dtype}')

@@ -1301,7 +1301,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             source_mesh = x['source_mesh']
             driving_mesh = x['driving_mesh']
             
-            tf_output = self.exp_transformer({'mesh': source_mesh['value']}, {'mesh': driving_mesh['value']}, placeholder=['kp'])
+            tf_output = self.exp_transformer({'mesh': source_mesh}, {'mesh': driving_mesh}, placeholder=['kp'])
 
             kp_canonical = {'value': tf_output['src_kp']}
             kp_canonical_drv = {'value': tf_output['drv_kp']}

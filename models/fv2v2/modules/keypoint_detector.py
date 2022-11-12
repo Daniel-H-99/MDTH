@@ -247,7 +247,10 @@ class ExpTransformer(nn.Module):
         
     def encode(self, x, placeholder=['kp', 'delta_code']):
         output = {}
-        processed_mesh = torch.cat([x['mesh']['value'][OPENFACE_ROI_IDX] , x['mesh']['mp_value'][MP_ROI_IDX]], dim=1)
+        of_roi_idx = x['mesh']['OPENFACE_ROI_IDX'][0]
+        mp_roi_idx = x['mesh']['MP_ROI_IDX'][0]
+
+        processed_mesh = torch.cat([x['mesh']['value'][:, of_roi_idx] , x['mesh']['mp_value'][:, mp_roi_idx]], dim=1)
         if 'kp' in placeholder:
             id_embedding = self.id_encoder(processed_mesh)
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']

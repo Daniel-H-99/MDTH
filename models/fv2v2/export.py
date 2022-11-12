@@ -26,7 +26,7 @@ from modules.keypoint_detector import HEEstimator, ExpTransformer, KPDetector
 from modules.landmark_model import LandmarkModel
 from modules.generator import OcclusionAwareSPADEGenerator
 from sync_batchnorm import DataParallelWithCallback
-from utils.util import OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, extract_mesh, draw_section, draw_mouth_mask, get_mesh_image, matrix2euler, euler2matrix, RIGHT_IRIS_IDX, LEFT_IRIS_IDX, extract_mesh, OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX, OPENFACE_NOSE_IDX
+from utils.util import extract_mesh_normalize, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, extract_mesh, draw_section, draw_mouth_mask, get_mesh_image, matrix2euler, euler2matrix, RIGHT_IRIS_IDX, LEFT_IRIS_IDX, extract_mesh, OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX, OPENFACE_NOSE_IDX, OPENFACE_OVAL_IDX, OPENFACE_NOSE_IDX
 from utils.one_euro_filter import OneEuroFilter
 from ffhq_align import image_align
 ###############################################################
@@ -564,30 +564,40 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     # sections = config['train_params']['sections']
 
-    reader = imageio.get_reader(os.path.join(opt.driving_dir, 'video.mp4'))
-    opt.fps = reader.get_meta_data()['fps']
-    driving_video = []
-    try:
-        for im in reader:
-            driving_video.append(im)
-    except RuntimeError:
-        pass
-    reader.close()
-
-    # driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
+    # reader = imageio.get_reader(os.path.join(opt.driving_dir, 'video.mp4'))
+    # opt.fps = reader.get_meta_data()['fps']
     # driving_video = []
-    # fids = []
-    # for frame_path in driving_frames_path:
-    #     driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
-    #     driving_video.append(driving_frame)
-    #     fid = int(frame_path.split('.png')[0])
-    #     fids.append(fid)
-    # order = torch.tensor(fids).argsort()
+    # try:
+    #     for im in reader:
+    #         driving_video.append(im)
+    # except RuntimeError:
+    #     pass
+    # reader.close()
+
+    ref_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
+    ref_mesh = torch.load(ref_path)
+    
+    driving_frames_path = os.listdir(os.path.join(opt.driving_dir, 'frames'))
+    driving_video = []
+    fids = []
+    
+    mp_meshes = []
+    for frame_path in driving_frames_path:
+        driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
+        driving_video.append(driving_frame)
+        mp_mesh = extract_mesh_normalize(img_as_ubyte(driving_frame), ref_mesh)
+        mp_meshes.append(mp_mesh)
+        fid = int(frame_path.split('.png')[0])
+        fids.append(fid)
+        
+    order = torch.tensor(fids).argsort()
     # print(f'driving frame shape: {driving_frame')
-    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))
+    driving_video = torch.tensor(np.array([resize(img_as_float32(frame), (256, 256))[..., :3] for frame in driving_video]))[order]
     # print(f'driving_video shape: {driving_video.shape}')
     driving_video = driving_video.permute(0, 3, 1, 2).float()
-
+    
+    mp_meshes = [mp_meshes[i] for i in order]
+    
     # section_indices = []
     # sections_indices_splitted = []
     # for sec in sections:
@@ -779,7 +789,11 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         # mesh['value'] = source_mesh['value']
         mesh['value'] = target_landmarks.float() / SCALE
         mesh['raw_value'] = torch.tensor(source_landmarks['3d_landmarks_pose'])
+        mesh['mp_value'] = mp_meshes[i]['value'] / SCALE + torch.tensor([[1, 1, 0]]).float()
 
+        mesh['MP_ROI_IDX'] = torch.tensor(LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX).long()
+        mesh['OPENFACE_ROI_IDX'] = torch.tensor(OPENFACE_OVAL_IDX + OPENFACE_NOSE_IDX + OPENFACE_LIP_IDX).long()
+        
         if relative_headpose:
             ### manipulate head pose ###
             driving_pose = driving_landmarks[driven_pose_index]['he_p']

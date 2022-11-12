@@ -1,0 +1,76 @@
+env:
+    raw_path: '/mnt/hdd/minyeong_workspace/Experiment/data'
+    checkpoint_path: '/mnt/hdd/minyeong_workspace/checkpoints'
+    proc_path: '/mnt/hdd/minyeong_workspace//Experiment/proc'
+    res_path: 'res'
+const:
+    SUCCESS: 1
+    FAILED: 0
+config:
+    common:
+        checkpoints:
+            landmark_model:
+                dir: '@checkpoint_path/landmark'
+            he_estimator:
+                model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'          
+            kp_extractor:
+                model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
+            generator:
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/00000011-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/mesh_img_fc_stage2.yaml'         
+            exp_transformer:
+                model: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/00000011-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_img_fc_stage2_v2/mesh_img_fc_stage2.yaml'                   
+        attr:
+            fps: 25
+    preprocess:
+        input:
+            dir: '@raw_path' 
+        output: 
+            dir: '@proc_path'
+    inference:
+        attr:
+            source_image: ''
+            driving_video: ''
+            result_video: ''
+            driven_dir: ''
+            from_flame: False
+            gen: 'spade'
+            ignore_emotion: True
+            relative: True 
+            adapt_scale: True 
+            find_best_frame: False
+            yaw: None
+            pitch: None
+            roll: None
+            pca_path: "@checkpoint_path/BFv2v/eye_pca.pt"
+        input: 
+            dir: '@proc_path'
+        output:
+            dir: '@res_path'
+dynamic:
+    gpus: [0]
+    mode: 'combination'
+    input_as_file: True
+    inputs:
+        source: 'inputs/source.txt'
+        driving: 'inputs/driving_tmp.txt'
+    label: 'ours_tmp_11'
+    rewrite: False
+    use_transformer: True
+    extract_driving_code: True
+    save_frames: False
+    stage: 2
+    relative_headpose: True
+    extract_landmarks: False
+    preprocess: False
+    skip_eval: False
+    load_exp: '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/ours_vox_small_2022-10-30T20:04:38'
+
+    
+    
+
+
+

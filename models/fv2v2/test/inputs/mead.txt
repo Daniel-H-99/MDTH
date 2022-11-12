@@ -1,0 +1,8 @@
+mead_samples/ang_001.mp4
+mead_samples/contempt_001.mp4
+mead_samples/disgusted_001.mp4
+mead_samples/fear_001.mp4
+mead_samples/happy_001.mp4
+mead_samples/neutral_001.mp4
+mead_samples/sad_001.mp4
+mead_samples/surprised_001.mp4

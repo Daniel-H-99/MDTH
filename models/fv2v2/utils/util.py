@@ -77,7 +77,28 @@ def normalized_to_pixel_coordinates(landmark_dict, image_width, image_height):
 #     # print(f'mesh: {mesh}')
 
 #     return mesh, noise_real, normalizer
-    
+
+def construct_denormalizer(R, t, c, k):
+    # R, t, c: tensor
+    # print(f'c type: {type(c)}')
+    R = R.float()
+    t = t.float().squeeze(1)
+
+    def expand_dim(a, b):
+        # a: 3 x 3, b: 3
+        a = a.float()
+        b = b.float()
+        tmp = torch.cat([a, b.unsqueeze(1)], axis=1)
+        tmp = torch.cat([tmp, torch.tensor([0, 0, 0, 1]).unsqueeze(0).float()], axis=0)
+        return tmp # 4 x 4
+    # print(f't shape: {t.shape}')
+    A_1 = expand_dim(k * R, k * torch.tensor([1, 1, 0]))
+    A_2 = expand_dim(c * R, t).inverse()
+    A_3 = A_1.inverse()
+
+    return A_3.matmul(A_2).matmul(A_1)
+
+
 def extract_mesh(image):
     # image: RGB, ubyte
     with mp_face_mesh.FaceMesh(

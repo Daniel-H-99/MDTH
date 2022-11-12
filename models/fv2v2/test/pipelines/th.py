@@ -6,6 +6,7 @@ import torch
 import pathlib
 import shutil
 import imageio
+import numpy as np
 
 root_dir = str(pathlib.Path(__file__).parent / '..' / '..')
 sys.path.insert(0, root_dir)
@@ -31,35 +32,37 @@ class THPipeline():
         self.he_estimator = export.load_he_estimator(self.config.config.common.checkpoints.he_estimator.config, self.config.config.common.checkpoints.he_estimator.model, self.gpus)
         self.landmark_model = export.load_landmark_model(self.config.config.common.checkpoints.landmark_model.dir, self.gpus)
         self.kp_extractor = None
-    def preprocess_image(self, img_name, rewrite=False):
+        
+    def preprocess_image(self, img_name, rewrite=False, preprocess=True, extract_landmarks=True):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
         src_path = os.path.join(src_dir, img_name)
         dest_path = os.path.join(dest_dir, self.process_name(img_name))
         dest_file_path = os.path.join(dest_path, 'image.png')
-        if not os.path.exists(dest_path):
-            os.makedirs(dest_path)
-        elif rewrite:
-            shutil.rmtree(dest_path, ignore_errors=True)
-            os.makedirs(dest_path)
-        self.landmark_model.preprocess_image(src_path, dest_file_path)
-        export.extract_landmark_from_img(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
+        if preprocess:
+            if not os.path.exists(dest_path):
+                os.makedirs(dest_path)
+            elif rewrite:
+                shutil.rmtree(dest_path, ignore_errors=True)
+                os.makedirs(dest_path)
+            self.landmark_model.preprocess_image(src_path, dest_file_path)
+        if extract_landmarks:
+            export.extract_landmark_from_img(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
             
-    def preprocess_video(self, video_name, rewrite=False):
+    def preprocess_video(self, video_name, rewrite=False, preprocess=True, extract_landmarks=True):
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
         src_path = os.path.join(src_dir, video_name)
         dest_path = os.path.join(dest_dir, self.process_name(video_name))
         dest_file_path = os.path.join(dest_path, 'video.mp4')
-        if not os.path.exists(dest_path):
-            os.makedirs(dest_path)
-        elif rewrite:
-            shutil.rmtree(dest_path, ignore_errors=True)
-            os.makedirs(dest_path)
-        self.landmark_model.preprocess_video(src_path, dest_file_path)
-        rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
-        
-        if rewritten:
+        if preprocess:
+            if not os.path.exists(dest_path):
+                os.makedirs(dest_path)
+            elif rewrite:
+                shutil.rmtree(dest_path, ignore_errors=True)
+                os.makedirs(dest_path)
+            self.landmark_model.preprocess_video(src_path, dest_file_path)
+
             frames_dir = os.path.join(dest_path, 'frames')
             if os.path.exists(frames_dir):
                 shutil.rmtree(frames_dir)
@@ -77,6 +80,15 @@ class THPipeline():
             
             for i, frame in enumerate(driving_video):
                 imageio.imwrite(os.path.join(frames_dir, '{:05d}.png'.format(i)), frame)
+                
+            
+        print(f'extract_landmarks: {extract_landmarks}')
+        if extract_landmarks:
+            rewritten = export.extract_landmark_from_video(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
+        else:
+            rewritten = False
+    
+
             
 
     def inference(self, src_name, drv_name, output_dir, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
@@ -95,8 +107,10 @@ class THPipeline():
             
         os.makedirs(frames_dir)
         ## leave inputs (src_path, drv_path) as inputs.txt
-        with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
-            f.writelines([src_path, drv_path])
+        inputs = [src_path, drv_path]
+        np.savetxt(os.path.join(output_path, 'inputs.txt'), inputs, fmt='%s', comments=None)
+        # with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
+        #     f.writelines([src_path+'\r\n', drv_path+'\r\n'])
             
         args_run = copy.copy(self.config.config.inference.attr)
         args_run.config = self.config.config.common.checkpoints.exp_transformer.config
@@ -111,9 +125,13 @@ class THPipeline():
         # add audio
         SIZE = 256
 
-        os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -i {os.path.join(drv_path, 'video.mp4')} -map 0:v:0 -map 1:a:0 -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
+        if os.path.exists(os.path.join(drv_path, 'video.mp4')):
+            os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -i {os.path.join(drv_path, 'video.mp4')} -map 0:v:0 -map 1:a:0 -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
+
+        else:
+            os.system(f"ffmpeg -y -i {os.path.join(args_run.result_dir, args_run.result_video)} -filter:v 'fps={self.config.config.common.attr.fps}' {output_file_path}")
         
-            
+        return output_name
         
         # ## 0. Setup Directories
         # tmp_dir = self.config.TH.preprocess.output.save_path

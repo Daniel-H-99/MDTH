@@ -1,13 +1,16 @@
-import os, sys
-import glob
-import time
-import traceback
-from datetime import datetime
-from scipy import stats
+from doctest import run_docstring_examples
+from symbol import pass_stmt
+import sys
+import os
+import argparse
+import shutil
 
-def kstest_uniform(X):
-    # X : 1-D numpy
-    return stats.kstest(X, stats.uniform.cdf)
+from requests import session
+from pipelines.th import THPipeline
+import yaml
+import datetime
+from metric import MetricEvaluater
+import numpy as np
 
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
@@ -21,158 +24,136 @@ class AttrDict(dict):
         else:
             return self({key: self.from_nested_dicts(data[key]) for key in data})
 
-class Silent:
-    def __enter__(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout.close()
-        sys.stdout = self._original_stdout
+def replace_env(env, d):
+    for k, v in d.items():
+        if type(v) == str:
+            for env_k, env_v in env.items():
+                env_k = '@' + env_k
+                if env_k in v:
+                    d[k] = v.replace(env_k, env_v)
+        elif type(v) == dict:
+            replace_env(env, v)
 
-class PathUtil:
-    def __init__(self, config, twin_id=None):
-        self.config = config
-        self.twin_id = twin_id
-        self.dlim = '@'
-
-    def replace_path(self, config, is_list=False):
-        if is_list:
-            list_replaced = []
-            for v in config:
-                if type(v) == AttrDict or type(v) == dict:
-                    list_replaced.append(self.replace_path(v))
-                elif type(v) == list:
-                    list_replaced.append(self.replace_path(v, is_list=True))
-                elif type(v) == str:
-                    v = v.replace(f'{self.dlim}RAW_PATH{self.dlim}', str(self.config.env.raw_path))
-                    v = v.replace(f'{self.dlim}COMMON_PATH{self.dlim}', str(self.config.env.common_path))
-                    v = v.replace(f'{self.dlim}PROC_PATH{self.dlim}', str(self.config.env.proc_path))
-                    v = v.replace(f'{self.dlim}SERV_PATH{self.dlim}', str(self.config.env.serv_path))
-                    v = v.replace(f'{self.dlim}TEMP_PATH{self.dlim}', str(self.config.env.temp_path))
-                    list_replaced.append(v)
-                else:
-                    list_replaced.append(v)
-            return list_replaced
-        else:
-            for k,v in config.items():
-                if type(v) == AttrDict or type(v) == dict:
-                    config[k] = self.replace_path(v)
-                elif type(v) == list:
-                    config[k] = self.replace_path(v, is_list=True)
-                elif type(v) == str:
-                    v = v.replace(f'{self.dlim}RAW_PATH{self.dlim}', str(self.config.env.raw_path))
-                    v = v.replace(f'{self.dlim}COMMON_PATH{self.dlim}', str(self.config.env.common_path))
-                    v = v.replace(f'{self.dlim}PROC_PATH{self.dlim}', str(self.config.env.proc_path))
-                    v = v.replace(f'{self.dlim}SERV_PATH{self.dlim}', str(self.config.env.serv_path))
-                    v = v.replace(f'{self.dlim}TEMP_PATH{self.dlim}', str(self.config.env.temp_path))
-                    config[k] = v
-            return config
-
-    def replace_twin(self, config, is_list=False):
-        if is_list:
-            list_replaced = []
-            for v in config:
-                if type(v) == AttrDict or type(v) == dict:
-                    list_replaced.append(self.replace_twin(v))
-                elif type(v) == list:
-                    list_replaced.append(self.replace_twin(v, is_list=True))
-                elif type(v) == str:
-                    v = v.replace(f'{self.dlim}TWIN_ID{self.dlim}', str(self.twin_id))
-                    list_replaced.append(v)
-                else:
-                    list_replaced.append(v)
-            return list_replaced
-        else:
-            for k,v in config.items():
-                if type(v) == AttrDict or type(v) == dict:
-                    config[k] = self.replace_twin(v)
-                elif type(v) == list:
-                    config[k] = self.replace_twin(v, is_list=True)
-                elif type(v) == str:
-                    v = v.replace(f'{self.dlim}TWIN_ID{self.dlim}', str(self.twin_id))
-                    config[k] = v
-            return config
-
-def now():
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
-
-async def get_twin_by_id(db, twin_id):
-    # try:
-    #     db.reconnect()
-    #     mycursor = db.cursor()
-    #     mycursor.execute(f"SELECT * FROM twins WHERE twin_id={twin_id}")
-    #     myresult = mycursor.fetchall()
-    #     ret_val = {
-    #         'id':myresult[0][0],
-    #         'name':myresult[0][1]}
-    # except Exception as e:
-    #     # traceback.print_exc()
-    #     print('returning dummy information ... ')
-    #     ret_val = {
-    #         'id' : -1,
-    #         'name' : 'dummy'}
-    # finally:
-    #     mycursor.close()
-    try:
-        info = await request_twin_info(twin_id)
-        ret_val = {
-            'id': info['id']
-        }
-    except Exception as e:
-        print('returning dummy information ... ')
-        ret_val = {'id' : '0181dba6-fcb6-7199-8e81-12560a39ab25'}
-    return ret_val
-
-async def request_twin_info(twin_id):
-    now = datetime.now().strftime("%Y%m%d-%H:%M:%S")
-    request_url = f'https://api.studio.warping.aitricsdev.com/internal/v1/twins/{twin_id}'
-    async with httpx.AsyncClient() as client:
-        tasks = [request(client,request_url)]
-        resp = await asyncio.gather(*tasks)
-    return json.loads(resp[0])
-
-def download_from_storage(s3, bucket_name, object_name, file_path):
-    try:
-        st = time.time()
-        s3.download_file(bucket_name, object_name, file_path)
-        print(f'download from cloud storage: done ({time.time()-st} s)')
-    except Exception as e:
-        traceback.print_exc()
-
-def download_dir_from_storage(s3, bucket_name, remote_dir, local_file_path):
-    try:
-        st = time.time()
-        os.makedirs(local_file_path, exist_ok=True)
-        for obj in s3.list_objects(Bucket=bucket_name, Prefix=remote_dir)['Contents']:
-            file_name=os.path.split(obj['Key'])[1]
-            s3.download_file(bucket_name, obj['Key'], os.path.join(local_file_path, file_name)) # save to same path
-        print(f'download from cloud storage: done ({time.time()-st} s)')
-    except:
-        traceback.print_exc()
+def read_config(config_path):
+	with open(config_path) as f:
+		config = yaml.load(f, Loader=yaml.FullLoader)
         
-def upload_to_storage(s3, bucket_name, bucket_path, file, is_obj=True):
-    try:
-        st = time.time()
-        if is_obj:
-            s3.upload_fileobj(file, bucket_name, bucket_path)
-        else:
-            s3.upload_file(file, bucket_name, os.path.join(bucket_path, os.path.split(file)[-1]))
-        print(f'uploaded to cloud storage: done ({time.time()-st} s)')
-    except Exception as e:
-        traceback.print_exc()
+	env = config['env']
+	replace_env(env, config)
+	config = AttrDict.from_nested_dicts(config)
 
-def upload_dir_to_storage(s3, bucket_name, bucket_path, local_file_path):
-    try:
-        st = time.time()
-        for paths in os.walk(local_file_path):
-            for path in paths[2]:
-                file_path = os.path.join(paths[0], path)
-                dest_path = os.path.join(bucket_path, *file_path.replace(local_file_path, '').split('/'))
-                print(f'{file_path} to {dest_path}')
-                s3.upload_file(file_path, bucket_name, dest_path)
-        print(f'download from cloud storage: done ({time.time()-st} s)')
-    except:
-        traceback.print_exc()
+	return config
+
+def setup_exp(args, config):
+    materials = {}
+    pipeline = THPipeline(config, config.dynamic.gpus)
+    materials['label'] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    if config.dynamic.label is not None:
+        materials['label'] = '_'.join([config.dynamic.label, materials['label']])
+    cwd = os.path.join(config.env.res_path, materials['label'])
+    os.makedirs(cwd)
+    shutil.copy(args.config, os.path.join(cwd, 'config.yaml'))
+    os.makedirs(os.path.join(cwd, 'inputs'))
+    os.makedirs(os.path.join(cwd, 'metrics'))
+    test_samples = construct_test_samples(config, cwd=cwd)
+    materials['root_dir'] = cwd
+    materials['config'] = config
+    materials['pipeline'] = pipeline
+    materials['test_samples'] = test_samples
+    materials['metric'] = MetricEvaluater(config)
+    materials = AttrDict.from_nested_dicts(materials)
+	
+    return materials
+
+def eval_iter_sessions(func, materials, session_names, post_fix=''):
+    scores = []
+    session_dirs = list(map(lambda x: os.path.join(materials.cwd, x), session_names))
+
+    for session_name, session_dir in zip(session_names, session_dirs):
+        inputs = np.loadtxt(os.path.join(session_dir, 'inputs.txt'))
+        source, driving = inputs
+        result_path = os.path.join(session, post_fix) if len(post_fix) > 0 else session
+        GT_path = os.path.join(driving, post_fix) if len(post_fix) > 0 else driving
+
+        score_session = func(result_path, GT_path)
+        scores[f'{session_name}'] = score_session
+	
+    return scores
+
+def eval_exp(materials, session_names):
+    metric = materials.metric
+    metrics = {}
+    ### same identity
+    #L1 ↓ FID ↓ SSIM ↑ LPIPS ↓ MS-SSIM ↑ AKD ↓ PSNR ↓
+    criterions = [metric.L1, metric.FID, metric.SSIM, metric.LPIPS, metric.MS-SSIM, metric.AKD, metric.PSNR]
+    for criterion in criterions:
+        score = eval_iter_sessions(criterion, materials, session_names, )
+        metric[''] = score
     
     
+
+def run_session(config, src, drv, pipeline, label):
+    ### preprocess
+	pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite)
+	pipeline.preprocess_video(drv, rewrite=config.dynamic.rewrite)
+    
+	### inference
+	session_dir = pipeline.inference(src, drv, label, use_transformer=config.dynamic.use_transformer, extract_driving_code=config.dynamic.extract_driving_code, stage=config.dynamic.stage, relative_headpose=config.dynamic.relative_headpose, save_frames=config.dynamic.save_frames)
+	return session_dir
+
+
+def run_exp(materials):
+	session_names = []
+	for src, drv in materials.test_samples:
+		print(f'running session: {(src, drv)}')
+		session_name = run_session(materials.config, src, drv, materials.pipeline, materials.label)
+		session_names.append(session_name)
+	
+	### evaluation
+	eval_exp(materials, session_names)
+ 
+	
+	
+
+def construct_test_samples(config, cwd=None):
+	samples = []
+	inputs = config.dynamic.inputs
+	if config.dynamic.input_as_file:
+		for input_key, input_file in list(vars(inputs).items()):
+			items = []
+			with open(input_file) as f:
+				lines = f.readlines()
+				for line in lines:
+					items.append(line.strip())
+			setattr(inputs, input_key, items)
+			if cwd is not None:
+				shutil.copy(input_file, os.path.join(cwd, 'inputs', input_key))
+	else:
+		inputs = config.dynamics.inputs
+	if config.dynamic.mode == 'pair':
+		for line in inputs.pair:
+			print(f'line: {line}')
+			src, drv = line.split(',')
+			samples.append((src, drv))
+	elif config.dynamic.mode == 'combination':
+		for source_line in inputs.source:
+			src = source_line
+			for driving_line in inputs.driving:
+				drv = driving_line
+				samples.append((src, drv))
+	return samples
+
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--config', type=str, required=True) 
+	args, unparsed  = parser.parse_known_args()
+
+	config_path = args.config
+
+	config = read_config(config_path)
+	print(f'running with config: {config}')
+ 
+	materials = setup_exp(args, config)
+ 
+	run_exp(materials)

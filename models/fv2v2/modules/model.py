@@ -178,7 +178,7 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['denormalizer'].transpose(1, 2))[:, :, :3] # B x N x 3
     # tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
-    tmp[:, :, 2] = tmp[:, :, 2]
+    tmp[:, :, 2] = - tmp[:, :, 2] / 5
     kp_transformed = tmp # B x N x 3
     
     
@@ -1266,7 +1266,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
 
         generator.train()
         for name, p in generator.named_parameters():
-            if 'dense' in name or 'resblocks_2d' in name or 'up_blocks' in name or 'final' in name: 
+            if 'dense' in name or 'decoder' in name or 'third' in name or 'fourth' in name: 
                 p.requires_grad = True
 
         self.stage = stage

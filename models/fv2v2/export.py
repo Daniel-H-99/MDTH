@@ -26,7 +26,7 @@ from modules.keypoint_detector import HEEstimator, ExpTransformer, KPDetector
 from modules.landmark_model import LandmarkModel
 from modules.generator import OcclusionAwareSPADEGenerator
 from sync_batchnorm import DataParallelWithCallback
-from utils.util import extract_mesh_normalize, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, extract_mesh, draw_section, draw_mouth_mask, get_mesh_image, matrix2euler, euler2matrix, RIGHT_IRIS_IDX, LEFT_IRIS_IDX, extract_mesh, OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX, OPENFACE_NOSE_IDX, OPENFACE_OVAL_IDX, OPENFACE_NOSE_IDX
+from utils.util import extract_mesh_normalize, LEFT_EYEBROW_IDX, LEFT_EYE_IDX, LEFT_IRIS_IDX, RIGHT_EYEBROW_IDX, RIGHT_EYE_IDX, RIGHT_IRIS_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, extract_mesh, draw_section, draw_mouth_mask, get_mesh_image, matrix2euler, euler2matrix, RIGHT_IRIS_IDX, LEFT_IRIS_IDX, extract_mesh, OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_LIP_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX, OPENFACE_NOSE_IDX, OPENFACE_OVAL_IDX, OPENFACE_NOSE_IDX
 from utils.one_euro_filter import OneEuroFilter
 from ffhq_align import image_align
 ###############################################################
@@ -460,6 +460,8 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
     tmp = tmp.matmul(mesh['U']) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
+    tmp[:, :, 2] = tmp[:, :, 2] / 5
+
     kp_transformed = tmp # B x N x 3
 
 
@@ -488,8 +490,8 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
         kp_source = preprocess_dict([source_mesh] * bs, device=device)
         
         # kp_canonical = kp_extractor(source)     # {'value': value, 'jacobian': jacobian}   
-        he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-
+        # he_source = he_estimator(source)        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+# 
 
         _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
 
@@ -501,7 +503,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
 
-            tf_output = exp_transformer({'img': source, 'mesh': _source_mesh['value']}, {'img': driving_frame, 'mesh': _driving_mesh['value']}, placeholder=['kp'] if stage ==1 else ['kp', 'delta'])
+            tf_output = exp_transformer({'mesh': _source_mesh}, {'mesh': _driving_mesh}, placeholder=['kp'] if stage ==1 else ['kp', 'delta'])
             
             src_embedding = tf_output['src_embedding']
             drv_embedding = tf_output['drv_embedding']
@@ -609,21 +611,28 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
     frame_shape = config['dataset_params']['frame_shape']
 
-    source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
+    if opt.source_dir.endswith('.mp4'):
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '0000000.png'))
+    else:
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
 
     if len(source_image.shape) == 2:
         source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)
 
     source_image = resize(img_as_float32(source_image), frame_shape[:2])[..., :3]
 
-    L = frame_shape[0]
-    SCALE = L // 2
-    A = np.array([-1, -1, 0], dtype='float32')[:, np.newaxis] # 3 x 1
-
-    driving_meshes = []
-    target_meshes = []
-
     source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
+    if type(source_landmarks) == list:
+        source_landmarks = source_landmarks[0]
+        
+    ### stage2
+    # source_meshes = preprocess_driving_meshes(source_meshes)
+    
+    L = source_image.shape[0]
+    SCALE = L // 2
+    A = torch.tensor([[-1, -1, 0]]).float() # 3 x 1
+    mp_mesh = extract_mesh_normalize(img_as_ubyte(source_image), ref_mesh)
+
     source_mesh = {}
     source_mesh['value'] = source_landmarks['3d_landmarks'].float() / SCALE
     right_iris = source_landmarks['normed_right_iris'].float() / SCALE
@@ -641,7 +650,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     source_mesh['scale'] = SCALE
     source_mesh['he_R'] = source_landmarks['he_p']['R']
     source_mesh['he_t'] = source_landmarks['he_p']['t']
-
+    source_mesh['mp_value'] = mp_mesh['value'] * 2 / L + A 
+    source_mesh['MP_ROI_IDX'] = torch.tensor(LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX).long()
+    source_mesh['OPENFACE_ROI_IDX'] = torch.tensor(OPENFACE_OVAL_IDX + OPENFACE_NOSE_IDX + OPENFACE_LIP_IDX).long()
+    
     ### calc bias ###
     s = np.linalg.norm((source_mesh['raw_value'][45] - source_mesh['raw_value'][36]) / SCALE) / np.linalg.norm(source_mesh['value'][45] - source_mesh['value'][36])
     source_mesh['s'] = s
@@ -651,6 +663,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     raw_mesh = source_mesh['raw_value']
     # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
 
+    
     driving_landmarks = torch.load(os.path.join(opt.driving_dir, '3d_landmarks.pt'))
     num_of_frames = len(driving_landmarks)
     driving_meshes = []
@@ -769,7 +782,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     ref_nose = driving_landmarks_from_flame[0][27:36]
     for i, driving_landmark in enumerate(driving_landmarks_from_flame):
         driven_pose_index = min(2 * len(driving_landmarks) - 1  - i % (2 * len(driving_landmarks)), i % (2 * len(driving_landmarks)))
-        driven_pose_index = 0
+        # driven_pose_index = 0
         mesh = {}
         ROI_IDX = ROI_EYE_IDX + list(range(48, 68))
         ROI_IDX = torch.tensor(ROI_IDX)
@@ -789,11 +802,12 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         # mesh['value'] = source_mesh['value']
         mesh['value'] = target_landmarks.float() / SCALE
         mesh['raw_value'] = torch.tensor(source_landmarks['3d_landmarks_pose'])
-        mesh['mp_value'] = mp_meshes[i]['value'] / SCALE + torch.tensor([[1, 1, 0]]).float()
+        mesh['mp_value'] = mp_meshes[i]['value'] / SCALE - torch.tensor([[1, 1, 0]]).float()
 
         mesh['MP_ROI_IDX'] = torch.tensor(LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX).long()
         mesh['OPENFACE_ROI_IDX'] = torch.tensor(OPENFACE_OVAL_IDX + OPENFACE_NOSE_IDX + OPENFACE_LIP_IDX).long()
-        
+        mesh['U'] = torch.tensor(driving_landmarks[driven_pose_index]['p']['U']).float()
+        # mesh['scale'] = driving_landmarks[driven_pose_index]['p']['scale']
         if relative_headpose:
             ### manipulate head pose ###
             driving_pose = driving_landmarks[driven_pose_index]['he_p']
@@ -880,7 +894,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         if i >= len(target_meshes):
             continue
         mesh = target_meshes[i]
-        frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
+        # frame = draw_section(mesh[:, :2].numpy().astype(np.int32), frame_shape, section_config=[OPENFACE_LEFT_EYEBROW_IDX, OPENFACE_RIGHT_EYEBROW_IDX, OPENFACE_NOSE_IDX, OPENFACE_LEFT_EYE_IDX, OPENFACE_RIGHT_EYE_IDX, OPENFACE_OUT_LIP_IDX, OPENFACE_IN_LIP_IDX] , mask=frame)
         meshed_frames.append(frame)
 
     predictions = meshed_frames

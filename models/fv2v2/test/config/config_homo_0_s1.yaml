@@ -56,7 +56,7 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/vox_eval_group_0_homo.txt'
-    label: '0_vox_eval_group_s1_homo'
+    label: 's1_vox_eval_group_0_homo'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

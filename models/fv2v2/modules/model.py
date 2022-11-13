@@ -1540,25 +1540,13 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
 
-            # he_source = self.he_estimator(x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            # he_driving = self.he_estimator(x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
-            
-            source_mesh = x['source_mesh']
-            driving_mesh = x['driving_mesh']
+            source_mesh = x['source_mesh']  # B x L x N x 3 (repeated for L times)
+            driving_mesh = x['driving_mesh'] # B x L x N x 3
             
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
             tf_output = self.exp_transformer({'mesh': source_mesh}, {'mesh': driving_mesh})
-
-            src_exp = tf_output['src_exp']
-            drv_exp = tf_output['drv_exp']
-
-            src_exp = 0
-            drv_exp = 0
-            
-            source_mesh['exp'] = src_exp
-            driving_mesh['exp'] = drv_exp
 
             kp_canonical = {'value': tf_output['src_kp']}
             kp_canonical_drv = {'value': tf_output['drv_kp']}
@@ -1567,18 +1555,18 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             delta_drv_embedding = {'delta_style_code': tf_output['src_embedding']['delta_style_code'], 'delta_exp_code': tf_output['drv_embedding']['delta_exp_code']}
             # {'value': value, 'jacobian': jacobian}
             
-            delta_src = self.exp_transformer.decode(delta_src_embedding)['delta']
-            delta_drv = self.exp_transformer.decode(delta_drv_embedding)['delta']
+            src_delta = self.exp_transformer.decode(delta_src_embedding)['delta']
+            drv_delta = self.exp_transformer.decode(delta_drv_embedding)['delta']
             
-            driving_mesh['exp'] = source_mesh['exp'] - delta_src + delta_drv
+            driving_mesh['delta'] = -src_delta + drv_delta
             
             kp_source = keypoint_transformation(kp_canonical, source_mesh)
             kp_driving = keypoint_transformation(kp_canonical, driving_mesh)
 
-            kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
-            kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
-            kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
-            kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
+            # kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
+            # kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
+            # kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
+            # kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
             # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
             # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
 
@@ -1633,15 +1621,15 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 delta_style_code = tf_output['src_embedding']['delta_style_code']
                 delta_exp_code = tf_output['src_embedding']['delta_exp_code']
                 delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
-                delta_src_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
-                source_mesh_cycled = {'U': driving_mesh['U'], 'scale': driving_mesh['scale'], 'exp': source_mesh['exp'] - delta_src + delta_src_cycled}
+                src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
+                source_mesh_cycled = {'denormalizer': source_mesh['denormalizer'], 'delta': - src_delta + src_delta_cycled}
 
                 kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 
                 generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
                 for k, v in list(generated_cycled.items()):
                     generated[f'{k}_cycled'] = v
-                generated['kp_driving_cycled'] = kp_source_cycled
+                generated['kp_source_cycled'] = kp_source_cycled
                 
 
             if self.loss_weights['log'] != 0:

@@ -222,8 +222,10 @@ class ExpTransformer(nn.Module):
         self.num_heads = num_heads
         self.num_kp = num_kp
         self.input_dim = input_dim
+        self.num_layer = num_layer
         self.latent_dim = latent_dim
-        
+        self.lstm_hidden_dim = lstm_hidden_dim
+        self.lstm_num_layer = lstm_num_layer
         self.id_encoder = MeshEncoder(n_vertices=106, num_kp=self.num_kp, latent_dim=latent_dim)
         self.kp_decoder = nn.Sequential(
             nn.Linear(self.latent_dim, self.num_kp * 3),
@@ -250,8 +252,9 @@ class ExpTransformer(nn.Module):
         output = {}
         of_roi_idx = x['mesh']['OPENFACE_ROI_IDX'][0]
         mp_roi_idx = x['mesh']['MP_ROI_IDX'][0]
-
-        processed_mesh = torch.cat([x['mesh']['value'][:, :, of_roi_idx] , x['mesh']['mp_value'][:, :, mp_roi_idx]], dim=1)
+        # print(f"value shape: {x['mesh']['value'].shape}")
+        # print(f"mp value shape: {x['mesh']['mp_value'].shape}")
+        processed_mesh = torch.cat([x['mesh']['value'][:, :, of_roi_idx] , x['mesh']['mp_value'][:, :, mp_roi_idx]], dim=2)
         if 'kp' in placeholder:
             id_embedding = self.id_encoder(processed_mesh[:, 2])
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']

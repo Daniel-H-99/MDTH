@@ -262,7 +262,7 @@ class ExpTransformer(nn.Module):
             
         if 'delta_code' in placeholder:
             mesh_flattened = processed_mesh.flatten(2)
-            style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
+            style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened[:, 2])
             exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened)
             
             delta_style_code = style_from_mesh
@@ -284,7 +284,7 @@ class ExpTransformer(nn.Module):
             x = torch.cat([x, style], dim=1)
             x = self.delta_decoder(x).view(-1, self.num_kp, 3)
             res['delta'] = x
-    
+            
         return res
 
     def forward(self, src, drv, placeholder=['kp', 'delta_code']):

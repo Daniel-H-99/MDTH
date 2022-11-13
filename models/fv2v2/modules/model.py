@@ -1622,7 +1622,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 delta_exp_code = tf_output['src_embedding']['delta_exp_code']
                 delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
                 src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
-                source_mesh_cycled = {'denormalizer': source_mesh['denormalizer'], 'delta': - src_delta + src_delta_cycled}
+                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': - src_delta + src_delta_cycled}
 
                 kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
 

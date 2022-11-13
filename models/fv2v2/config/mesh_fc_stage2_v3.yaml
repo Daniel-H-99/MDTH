@@ -93,11 +93,11 @@ train_params:
     keypoint: 0
     headpose: 0
     motion_match: 0
-    log: 0
+    log: 50
     expression: 0
     localized: [0, 0, 0, 0, 0, 0, 0, 0, 0]
     style: 0
-    id_cls: 10
+    id_cls: 0
     l1: 0
 
 visualizer_params:

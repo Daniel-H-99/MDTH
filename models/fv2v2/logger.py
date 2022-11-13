@@ -232,6 +232,7 @@ class Visualizer:
             prediction = out['prediction_cycled'].data.cpu().numpy()
             prediction = np.transpose(prediction, [0, 2, 3, 1])
             images.append((prediction, kp_driving))
+            
         if 'source_mesh_image' in out:
             
             images.append(np.transpose(out['source_mesh_image'].repeat(1, 3, 1, 1).data.cpu().numpy(), [0,2,3,1]))

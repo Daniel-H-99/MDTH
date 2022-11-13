@@ -606,7 +606,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     #     section_indices.extend(sec[0])
     #     sections_indices_splitted.append(sec[0])
 
-        
+    m
     fps = opt.fps
 
     frame_shape = config['dataset_params']['frame_shape']
@@ -624,10 +624,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
     if type(source_landmarks) == list:
         source_landmarks = source_landmarks[0]
-        
-    ### stage2
-    # source_meshes = preprocess_driving_meshes(source_meshes)
-    
+
     L = source_image.shape[0]
     SCALE = L // 2
     A = torch.tensor([[-1, -1, 0]]).float() # 3 x 1
@@ -663,7 +660,13 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     raw_mesh = source_mesh['raw_value']
     # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
 
-    
+    source_meshes = [source_mesh]
+            
+    ### stage2
+    source_meshes = preprocess_driving_meshes(source_meshes)
+    sourcE_mesh = source_meshes[0]
+    ##########
+
     driving_landmarks = torch.load(os.path.join(opt.driving_dir, '3d_landmarks.pt'))
     num_of_frames = len(driving_landmarks)
     driving_meshes = []
@@ -843,10 +846,11 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         
         driving_meshes.append(mesh)
 
-
+    
     # use one euro filter for denoising
     if relative_headpose:
         filter_mesh(driving_meshes, source_mesh, SCALE)
+
     target_meshes = []
 
     ## split inputs
@@ -859,6 +863,9 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         mesh['raw_mesh'] = raw_mesh
         # mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
         target_meshes.append(SCALE * (mesh['value'][17:] + 1))
+
+    ### stage 2
+    driving_meshes = preprocess_driving_meshes(driving_meshes)
 
     # que = mp.Manager().Queue()
 

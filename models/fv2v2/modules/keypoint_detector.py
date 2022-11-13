@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree, ResnetEncoder, AdaIn
+from modules.util import KPHourglass, MeshEncoder, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck, Resnet1DEncoder, LinearEncoder, BiCategoricalEncodingLayer, get_rotation_matrix, headpose_pred_to_degree, ResnetEncoder, AdaIn, LSTMEncoder
 class KPDetector(nn.Module):
     """
     Detecting canonical keypoints. Return keypoint position and jacobian near each keypoint.
@@ -217,7 +217,7 @@ class ExpTransformer(nn.Module):
     Estimating transformed expression of given target face expression to source identity
     """
 
-    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, estimate_jacobian=True, sections=None):
+    def __init__(self, block_expansion, feature_channel, input_dim, num_kp, image_channel, max_features, num_bins=66, num_layer=1, num_heads=32, code_dim=8, latent_dim=256, lstm_num_layer=1, lstm_hidden_dim=256, estimate_jacobian=True, sections=None):
         super(ExpTransformer, self).__init__()
         self.num_heads = num_heads
         self.num_kp = num_kp
@@ -233,9 +233,9 @@ class ExpTransformer(nn.Module):
 
 
         self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
-        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
-        self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
+        # self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
         self.delta_exp_extractor_from_mesh = LSTMEncoder(input_dim=3 * 106, hidden_dim=self.lstm_hidden_dim, output_dim=self.num_heads, num_layer=self.lstm_num_layer)
+        self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
@@ -251,14 +251,14 @@ class ExpTransformer(nn.Module):
         of_roi_idx = x['mesh']['OPENFACE_ROI_IDX'][0]
         mp_roi_idx = x['mesh']['MP_ROI_IDX'][0]
 
-        processed_mesh = torch.cat([x['mesh']['value'][:, of_roi_idx] , x['mesh']['mp_value'][:, mp_roi_idx]], dim=1)
+        processed_mesh = torch.cat([x['mesh']['value'][:, :, of_roi_idx] , x['mesh']['mp_value'][:, :, mp_roi_idx]], dim=1)
         if 'kp' in placeholder:
-            id_embedding = self.id_encoder(processed_mesh)
+            id_embedding = self.id_encoder(processed_mesh[:, 2])
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
             output['kp'] = id_embedding
             
         if 'delta_code' in placeholder:
-            mesh_flattened = processed_mesh.flatten(1)
+            mesh_flattened = processed_mesh.flatten(2)
             style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
             exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened)
             

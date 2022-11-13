@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 from time import gmtime, strftime
 from shutil import copy
 
-from frames_dataset import FramesDataset3
+from frames_dataset import FramesDataset3S2
 
 from modules.generator import OcclusionAwareGenerator, OcclusionAwareSPADEGenerator
 from modules.discriminator import MultiScaleDiscriminator
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
        exp_transformer.to(opt.device_ids[0])
 
-    dataset = FramesDataset3(is_train=(opt.mode == 'train'), **config['dataset_params'])
+    dataset = FramesDataset3S2(is_train=(opt.mode == 'train'), **config['dataset_params'])
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)

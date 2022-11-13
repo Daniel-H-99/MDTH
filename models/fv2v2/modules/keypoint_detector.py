@@ -235,6 +235,7 @@ class ExpTransformer(nn.Module):
         self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
         self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
         self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
+        self.delta_exp_extractor_from_mesh = LSTMEncoder(input_dim=3 * 106, hidden_dim=self.lstm_hidden_dim, output_dim=self.num_heads, num_layer=self.lstm_num_layer)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))

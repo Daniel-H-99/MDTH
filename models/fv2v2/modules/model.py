@@ -1549,7 +1549,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             # driving_mesh['scale'] = source_mesh['scale']
             # driving_mesh['U'] = np.source_mesh['U']
             
-            tf_output = self.exp_transformer({'img': x['source'], 'mesh': source_mesh['value']}, {'img': x['driving'], 'mesh': driving_mesh['value']})
+            tf_output = self.exp_transformer({'mesh': source_mesh}, {'mesh': driving_mesh})
 
             src_exp = tf_output['src_exp']
             drv_exp = tf_output['drv_exp']
@@ -1625,8 +1625,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             
             generated['source_kp_canonical'] = {'value': kp_source['canonical']}
             generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
-            generated['source_mesh_image'] = kp_source['mesh_img_sec']
-            generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
+            # generated['source_mesh_image'] = kp_source['mesh_img_sec']
+            # generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
             
             if cycled_drive:
                 ## cycled expression drive
@@ -1723,8 +1723,6 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 loss_values['perceptual'] = value_total
 
             if self.loss_weights['generator_gan'] != 0:
-                pyramide_real = self.pyramid_cond(torch.cat([kp_driving['_mesh_img_sec'].cuda(), x['driving']], dim=1))
-                pyramide_generated = self.pyramid_cond(torch.cat([kp_driving['mesh_img_sec'].cuda(), generated['prediction']], dim=1))
                 discriminator_maps_generated = self.discriminator(pyramide_generated)
                 discriminator_maps_real = self.discriminator(pyramide_real)
                 

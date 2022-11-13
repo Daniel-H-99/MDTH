@@ -37,9 +37,9 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
         Logger.load_cpk(checkpoint_ref, generator=generator)
 
     if checkpoint is not None:
-        # start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator)
-        # start_epoch = 0
-        start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator, optimizer_exp_transformer=optimizer, optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator)
+        start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator)
+        start_epoch = 0
+        # start_epoch = Logger.load_cpk(checkpoint, exp_transformer=exp_transformer, generator=generator, discriminator=discriminator, optimizer_exp_transformer=optimizer, optimizer_generator=optimizer_generator, optimizer_discriminator=optimizer_discriminator)
     else:
         start_epoch = 0
         

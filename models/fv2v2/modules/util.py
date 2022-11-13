@@ -123,6 +123,29 @@ class BiCategoricalEncodingLayer(nn.Module):
         x = 2 * x - 1
         return x
 
+class LSTMEncoder(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layer=1, bi=False, dropout=0.2):
+        super(LSTMEncoder, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.num_layer = num_layer
+        self.bi = bi
+        self.D = (2  if self.bi else 1) * self.num_layer
+        self.dropout = dropout
+        self.encoder = nn.LSTM(self.input_dim, self.hidden_dim, self.num_layer, batch_first=True, bidirectional=self.bi, dropout=self.dropout)
+        self.h0 = torch.nn.Parameter(torch.zeros(self.D, self.hidden_dim).float())
+        self.c0 = torch.nn.Parameter(torch.zeros(self.D, self.hidden_dim).float())
+        self.fc = nn.Linear(self.hidden_dim, self.output_dim)
+
+    def forward(self, x):
+        # x: B x L x input_dim
+        h0 = self.h0.unsqueeze(1).repeat(1, len(x), 1)
+        c0 = self.c0.unsqueeze(1).repeat(1, len(x), 1)
+        output, _ = self.encoder(x, (h0, c0))
+        output = self.fc(F.leaky_relu(output[:, -1], 0.2))
+        return output
+
 class LinearEncoder(nn.Module):
     def __init__(self, input_dim: int, latent_dim: int = None, output_dim: int = None, depth=0):
         """

@@ -21,6 +21,7 @@ from skimage.transform import resize
 from skimage import img_as_ubyte, img_as_float32
 import torch.multiprocessing as mp
 import math
+import copy
 ###############################################################
 from modules.keypoint_detector import HEEstimator, ExpTransformer, KPDetector
 from modules.landmark_model import LandmarkModel
@@ -503,7 +504,12 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
 
-            tf_output = exp_transformer({'mesh': _source_mesh}, {'mesh': _driving_mesh}, placeholder=['kp'] if stage ==1 else ['kp', 'delta'])
+            # print(f'source value shape: {_source_mesh["value"].shape}')
+            # print(f'source mp value shape: {_source_mesh["mp_value"].shape}')
+            # print(f'driving value shape: {_driving_mesh["value"].shape}')
+            # print(f'driving mp value shape: {_driving_mesh["mp_value"].shape}')
+
+            tf_output = exp_transformer({'mesh': _source_mesh}, {'mesh': _driving_mesh}, placeholder=['kp'] if stage == 1 else ['kp', 'delta_code'])
             
             src_embedding = tf_output['src_embedding']
             drv_embedding = tf_output['drv_embedding']
@@ -512,11 +518,11 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
             kp_canonical_drv = {'value': tf_output['drv_kp']}
 
             if stage==2:
-                src_delta = tf_output['src_delta']
-                drv_delta = tf_output['drv_delta']
+                # src_delta = tf_output['src_delta']
+                # drv_delta = tf_output['drv_delta']
                 
-                _source_mesh['delta'] = src_delta
-                _driving_mesh['delta'] = drv_delta
+                # _source_mesh['delta'] = src_delta
+                # _driving_mesh['delta'] = drv_delta
             
                 delta_source_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': src_embedding['delta_exp_code']}
                 delta_driving_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': drv_embedding['delta_exp_code']}
@@ -528,7 +534,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                     driving_codes.append(tf_output['drv_embedding']['delta_exp_code'].detach().cpu().numpy())
 
             
-                _driving_mesh['delta'] = - src_delta + drv_delta
+                _driving_mesh['delta'] = - delta_src + delta_drv
             
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, _source_mesh)
@@ -555,6 +561,24 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
         res['driving_codes'] = np.concatenate(driving_codes, axis=0)
 
     return res
+
+def preprocess_driving_meshes(meshes, L=5):
+    # meshes: L x mesh
+    num_meshes = len(meshes)
+    output = copy.deepcopy(meshes)
+    for i, mesh in enumerate(output):
+        seq = []
+        mp_seq = []
+        for j in range(i - L // 2, i - L // 2 + L):
+            j = max(0, j)
+            j = min(num_meshes - 1, j)
+            seq.append(meshes[j]['value'])
+            mp_seq.append(meshes[j]['mp_value'])
+        seq = torch.stack(seq, dim=0)
+        mp_seq = torch.stack(mp_seq, dim=0)
+        mesh['value'] = seq
+        mesh['mp_value'] = mp_seq
+    return output
 
 def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
     st = time.time()
@@ -606,7 +630,6 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     #     section_indices.extend(sec[0])
     #     sections_indices_splitted.append(sec[0])
 
-    m
     fps = opt.fps
 
     frame_shape = config['dataset_params']['frame_shape']
@@ -664,7 +687,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             
     ### stage2
     source_meshes = preprocess_driving_meshes(source_meshes)
-    sourcE_mesh = source_meshes[0]
+    source_mesh = source_meshes[0]
     ##########
 
     driving_landmarks = torch.load(os.path.join(opt.driving_dir, '3d_landmarks.pt'))

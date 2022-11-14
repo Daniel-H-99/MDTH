@@ -9,7 +9,7 @@ tgt_dir = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/'
 
 dirs = []
 for dir in os.listdir(tgt_dir):
-    if dir.startswith('0_'):
+    if dir.startswith('s2_'):
         dirs.append(os.path.join(tgt_dir, dir))
      
 for dir in dirs:

@@ -107,10 +107,10 @@ def run_session(config, src, drv, pipeline, label):
 	# src: path to raw image
 	# drv: path to driving info 
     ### preprocess
-	pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite, preprocess=config.dynamic.preprocess, extract_landmarks=config.dynamic.extract_landmarks)
+	# pipeline.preprocess_image(src, rewrite=config.dynamic.rewrite, preprocess=config.dynamic.preprocess, extract_landmarks=config.dynamic.extract_landmarks)
 
-	while True:
-		continue
+	# while True:
+	# 	continue
 	### inference
 	session_dir = pipeline.inference_expression(src, drv, label)
 

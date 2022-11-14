@@ -55,7 +55,7 @@ dynamic:
     mode: 'pair'
     input_as_file: True
     inputs:
-        pair: 'inputs/vox_eval_group_0_homo.txt'
+        pair: 'inputs/vox_eval_group_4_homo.txt'
     label: 's2_vox_eval_group_4_homo'
     rewrite: False
     use_transformer: True

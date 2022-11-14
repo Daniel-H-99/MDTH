@@ -14,6 +14,20 @@ import export
 #######################################
 #######################################
 
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+    @classmethod
+    def from_nested_dicts(self, data):
+        if not isinstance(data, dict):
+            return data
+        else:
+            return self({key: self.from_nested_dicts(data[key]) for key in data})
+
+
+
 class THPipeline():
     def __init__(self, config, gpus):
         self.config = config
@@ -172,7 +186,7 @@ class THPipeline():
         export.test_model_with_exp(args_run, self.generator, self.exp_transformer, self.kp_extractor, self.he_estimator, self.gpus)
 
         return output_name
-        
+
         # ## 0. Setup Directories
         # tmp_dir = self.config.TH.preprocess.output.save_path
         # preprocess_path = self.config.TH.preprocess.output.save_path

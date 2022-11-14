@@ -468,6 +468,72 @@ def keypoint_transformation(kp_canonical, mesh):
 
     return {'value': kp_transformed, 'normed': kp_normed}   
 
+def make_animation_expression(rank, gpu_list, source_image, driving_expressions, source_mesh, data_per_node, generator, exp_transformer):
+    # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
+    #                                         world_size=len(gpu_list), rank=rank)
+    # generator = generator.to(gpu_list[rank])
+    # generator = torch.nn.parallel.DistributedDataParallel(generator, device_ids=[gpu_list[rank]])
+    res = {}
+
+    with torch.no_grad():
+        predictions = []
+        device = f'cuda:{gpu_list[rank]}'
+        num_gpus = len(gpu_list)
+
+        bs = 1
+
+        source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(bs, 1, 1, 1)
+        source = source.to(device)
+
+        kp_source = preprocess_dict([source_mesh] * bs, device=device)
+
+        _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
+
+        assert len(driving_meshes) == len(driving_video)
+        for frame_idx in tqdm(range(0, len(driving_expressions), bs)):
+            driving_expression = driving_expressions[frame_idx:frame_idx+bs].to(device)
+            if len(driving_frame) < bs:
+                _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
+                source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
+                source = source.to(device)
+
+            src_embedding = exp_transformer.encode({'mesh': _source_mesh['value']})
+            tf_output_src = exp_transformer.decode(src_embedding)
+            kp_canonical = {'value': tf_output_src['kp']}
+            src_delta = tf_output_src['delta']
+
+            delta_driving_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': driving_expression}
+            drv_delta = exp_transformer.module.decode(delta_driving_embedding)['delta']
+            _driving_mesh = copy.deepcopy(source_mesh)
+            _driving_mesh['delta'] = drv_delta
+        
+            # {'value': value, 'jacobian': jacobian}
+            kp_source = keypoint_transformation(kp_canonical, _source_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
+
+            kp_norm = kp_driving
+
+            out = generator(source, kp_source=kp_source, kp_driving=kp_norm)
+
+            predictions.append(np.transpose(out['prediction'].data.cpu().numpy(), [0, 2, 3, 1]))
+
+
+    predictions = np.concatenate(predictions, axis=0)
+    # print(f'predictions shape: {predictions.shape}')
+    # while True:
+    #     pass
+    # predictions = np.ascontiguousarray(np.concatenate(predictions, axis=0)).astype(np.uint8).clip(0, 255))
+    # que.put((rank, predictions))
+
+    # torch.distributed.destroy_process_group()
+    res['predictions'] = predictions
+
+    if extract_driving_code and stage == 2:
+        res['driving_codes'] = np.concatenate(driving_codes, axis=0)
+
+    return res
+
+
 def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, driving_meshes, data_per_node, generator, exp_transformer, kp_extractor, he_estimator, use_transformer=True, extract_driving_code=False, que=None, stage=1):
     # torch.distributed.init_process_group(backend='nccl',init_method='tcp://127.0.0.1:3456',
     #                                         world_size=len(gpu_list), rank=rank)

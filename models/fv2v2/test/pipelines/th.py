@@ -133,6 +133,46 @@ class THPipeline():
         
         return output_name
         
+        
+    def inference_expression(self, src_name, drv_name, output_dir):
+        src_name = self.process_name(src_name)
+        ### construct object of driving info
+        drv_exp = np.loadtxt(drv_name, dtype=str)
+        driving_info = {}
+        for line in drv_exp:
+            k, v = line.split(',')
+            driving_info[k] = int(v)
+        driving_info = AttrDict.from_nested_dicts(driving_info)
+        ###
+        drv_name = os.path.basename(drv_name)
+        output_name = '_'.join([src_name, drv_name])
+        input_dir = self.config.config.inference.input.dir
+        output_dir = os.path.join(self.config.config.inference.output.dir, output_dir)
+        src_path = os.path.join(input_dir, src_name)
+        output_path = os.path.join(output_dir, output_name)
+        output_file_path = os.path.join(output_path, output_name + '.mp4')
+
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+            
+        os.makedirs(frames_dir)
+        ## leave inputs (src_path, drv_path) as inputs.txt
+        inputs = [src_path, drv_name]
+        np.savetxt(os.path.join(output_path, 'inputs.txt'), inputs, fmt='%s', comments=None)
+        # with open(os.path.join(output_path, 'inputs.txt'), 'w') as f:
+        #     f.writelines([src_path+'\r\n', drv_path+'\r\n'])
+            
+        args_run = copy.copy(self.config.config.inference.attr)
+        args_run.config = self.config.config.common.checkpoints.exp_transformer.config
+        args_run.source_dir = src_path
+        args_run.driving_expression = driving_info
+        args_run.result_dir = output_path
+        args_run.result_video = 'video.mp4'
+        args_run.fps = self.config.config.common.attr.fps
+        export.test_model_with_exp(args_run, self.generator, self.exp_transformer, self.kp_extractor, self.he_estimator, self.gpus)
+
+        return output_name
+        
         # ## 0. Setup Directories
         # tmp_dir = self.config.TH.preprocess.output.save_path
         # preprocess_path = self.config.TH.preprocess.output.save_path

@@ -489,23 +489,22 @@ def make_animation_expression(rank, gpu_list, source_image, driving_expressions,
 
         _source_mesh = preprocess_dict([source_mesh] * bs, device=device)
 
-        assert len(driving_meshes) == len(driving_video)
         for frame_idx in tqdm(range(0, len(driving_expressions), bs)):
             driving_expression = driving_expressions[frame_idx:frame_idx+bs].to(device)
-            if len(driving_frame) < bs:
+            if len(driving_expression) < bs:
                 _source_mesh = preprocess_dict([source_mesh] * len(kp_driving['value']), device=device)
                 source = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2).repeat(len(kp_driving['value']), 1, 1, 1)
                 source = source.to(device)
 
-            src_embedding = exp_transformer.encode({'mesh': _source_mesh['value']})
-            tf_output_src = exp_transformer.decode(src_embedding)
+            src_embedding = exp_transformer.module.encode({'mesh': _source_mesh})
+            tf_output_src = exp_transformer.module.decode(src_embedding)
             kp_canonical = {'value': tf_output_src['kp']}
             src_delta = tf_output_src['delta']
-
+            # print(f'driving_exrpssion: {driving_expression}')
             delta_driving_embedding = {'delta_style_code': src_embedding['delta_style_code'], 'delta_exp_code': driving_expression}
             drv_delta = exp_transformer.module.decode(delta_driving_embedding)['delta']
-            _driving_mesh = copy.deepcopy(source_mesh)
-            _driving_mesh['delta'] = drv_delta
+            _driving_mesh = copy.deepcopy(_source_mesh)
+            _driving_mesh['delta'] = -src_delta + drv_delta
         
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, _source_mesh)
@@ -527,9 +526,6 @@ def make_animation_expression(rank, gpu_list, source_image, driving_expressions,
 
     # torch.distributed.destroy_process_group()
     res['predictions'] = predictions
-
-    if extract_driving_code and stage == 2:
-        res['driving_codes'] = np.concatenate(driving_codes, axis=0)
 
     return res
 
@@ -646,6 +642,105 @@ def preprocess_driving_meshes(meshes, L=5):
         mesh['value'] = seq
         mesh['mp_value'] = mp_seq
     return output
+
+
+def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list):
+    st = time.time()
+    with open(opt.config) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+
+    ref_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
+    ref_mesh = torch.load(ref_path)
+    
+
+    fps = opt.fps
+
+    frame_shape = config['dataset_params']['frame_shape']
+
+
+    if opt.source_dir.endswith('.mp4'):
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'frames', '0000000.png'))
+    else:
+        source_image = imageio.imread(os.path.join(opt.source_dir, 'image.png'))
+
+    if len(source_image.shape) == 2:
+        source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)
+
+    source_image = resize(img_as_float32(source_image), frame_shape[:2])[..., :3]
+
+    source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
+    if type(source_landmarks) == list:
+        source_landmarks = source_landmarks[0]
+
+    L = source_image.shape[0]
+    SCALE = L // 2
+    A = torch.tensor([[-1, -1, 0]]).float() # 3 x 1
+    mp_mesh = extract_mesh_normalize(img_as_ubyte(source_image), ref_mesh)
+
+    source_mesh = {}
+    source_mesh['value'] = source_landmarks['3d_landmarks'].float() / SCALE
+    right_iris = source_landmarks['normed_right_iris'].float() / SCALE
+    left_iris = source_landmarks['normed_left_iris'].float() / SCALE
+    # source_mesh['value'][3] = right_iris
+    # source_mesh['value'][4] = left_iris
+    source_mesh['raw_value'] = source_landmarks['3d_landmarks_pose']
+    pose_p = source_landmarks['p']
+    source_mesh['proj'] = pose_p['proj'].copy()
+    source_mesh['view'] = pose_p['view'].copy()
+    source_mesh['viewport'] = pose_p['viewport'].copy()
+    source_mesh['R'] = pose_p['view'][:3, :3]
+    source_mesh['t'] = pose_p['viewport'][:3, 3].copy()
+    source_mesh['U'] = pose_p['U']
+    source_mesh['scale'] = SCALE
+    source_mesh['he_R'] = source_landmarks['he_p']['R']
+    source_mesh['he_t'] = source_landmarks['he_p']['t']
+    source_mesh['mp_value'] = mp_mesh['value'] * 2 / L + A 
+    source_mesh['MP_ROI_IDX'] = torch.tensor(LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX).long()
+    source_mesh['OPENFACE_ROI_IDX'] = torch.tensor(OPENFACE_OVAL_IDX + OPENFACE_NOSE_IDX + OPENFACE_LIP_IDX).long()
+    
+    ### calc bias ###
+    s = np.linalg.norm((source_mesh['raw_value'][45] - source_mesh['raw_value'][36]) / SCALE) / np.linalg.norm(source_mesh['value'][45] - source_mesh['value'][36])
+    source_mesh['s'] = s
+    b = np.linalg.inv(source_mesh['he_R']) @ ((1 / s) * (source_mesh['U'][3, :3] / SCALE - source_mesh['he_t'] - np.array([1, 1, 0]))[:, np.newaxis])
+    source_mesh['b'] = b
+
+    raw_mesh = source_mesh['raw_value']
+    # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
+    source_meshes = [source_mesh]
+            
+    ### stage2
+    source_meshes = preprocess_driving_meshes(source_meshes)
+    source_mesh = source_meshes[0]
+    ##########
+
+    ### driving expressions
+    driving_info = opt.driving
+    driving_exp_head = torch.linspace(driving_info.start, driving_info.end, driving_info.slices)
+    num_frames = len(driving_exp_head)
+    driving_expression = torch.zeros(num_frames, driving_info.num_heads)
+    driving_expression[:, driving_info.head] = driving_exp_head
+
+    NODES = 1
+    data_per_node = math.ceil(len(driving_expression) / NODES)
+
+    res = make_animation_expression(0, gpu_list, source_image, driving_expression, source_mesh, data_per_node, generator, exp_transformer)
+    predictions = res['predictions']
+    
+    # frame styling
+    styled_frames = []
+
+    for i, frame in enumerate(predictions):
+        frame = np.ascontiguousarray(img_as_ubyte(frame))
+        cv2.putText(img=frame, text=f'head: {driving_info.head}, exp: {driving_exp_head[i]}', fontFace=cv2.FONT_ITALIC, org=(192, 64), fontScale=2, color=(255, 255, 255), thickness=1)
+        styled_frames.append(frame)
+
+    predictions = styled_frames
+
+    imageio.mimsave(os.path.join(opt.result_dir, opt.result_video), predictions, fps=fps)
+
+    return predictions
+
 
 def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
     st = time.time()

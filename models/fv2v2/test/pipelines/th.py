@@ -168,8 +168,7 @@ class THPipeline():
 
         if not os.path.exists(output_path):
             os.makedirs(output_path)
-            
-        os.makedirs(frames_dir)
+
         ## leave inputs (src_path, drv_path) as inputs.txt
         inputs = [src_path, drv_name]
         np.savetxt(os.path.join(output_path, 'inputs.txt'), inputs, fmt='%s', comments=None)
@@ -179,7 +178,7 @@ class THPipeline():
         args_run = copy.copy(self.config.config.inference.attr)
         args_run.config = self.config.config.common.checkpoints.exp_transformer.config
         args_run.source_dir = src_path
-        args_run.driving_expression = driving_info
+        args_run.driving = driving_info
         args_run.result_dir = output_path
         args_run.result_video = 'video.mp4'
         args_run.fps = self.config.config.common.attr.fps

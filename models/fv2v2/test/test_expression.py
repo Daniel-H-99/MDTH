@@ -99,8 +99,11 @@ def run_aggregation(materials):
 	### concat videos
 	cwd = materials.cwd
 	output_video = os.path.join(materials.cwd, 'aggregation.mp4')
-	concat_cmd = 'concat:' + '|'.join([os.path.join(cwd, session, 'video.mp4') for session in materials.session_names])
-	cmd = f'ffmpeg -i {concat_cmd} -codec copy {output_video}'
+	session_videos = [os.path.join(cwd, session, 'video.mp4') for session in materials.session_names]
+	concat_cmd = '-i '.join([f'"{os.path.join(cwd, session, "video.mp4")}"' for session in materials.session_names])
+	cmd = f'sudo ffmpeg {concat_cmd} -y {output_video}'
+	# while True:
+	# 	continue
 	os.system(cmd)
 	
 def run_session(config, src, drv, pipeline, label):
@@ -126,13 +129,16 @@ def run_exp(materials):
 	materials.logger.info('finished exp')
 	setattr(materials, 'session_names', session_names)
 
-	### aggregate
-	run_aggregation(materials, session_names)
-
 	del materials.pipeline
 	del materials.logger
 
 	torch.save(materials, os.path.join(materials.cwd, 'materials.pt'))
+
+
+	### aggregate
+	run_aggregation(materials)
+
+
 
 def construct_test_samples(config, cwd=None):
 	samples = []

@@ -9,9 +9,10 @@ result_dir = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/expressio
 
 def write_contents(h, start, end, slices):
     lines = []
+    lines.append(f'num_heads,{NUM_HEADS}')
     lines.append(f'head,{h}')
     lines.append(f'start,{start}')
-    lines.append(f'emd,{end}')
+    lines.append(f'end,{end}')
     lines.append(f'slices,{slices}')
     return lines
 

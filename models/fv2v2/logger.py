@@ -71,11 +71,11 @@ class Logger:
         
         
         if exp_transformer is not None:
-            _state = exp_transformer.state_dict()
-            for k, v in checkpoint['exp_transformer'].items():
-                if 'delta' not in k:
-                    _state[k] = v
-            # _state = checkpoint['exp_transformer']
+            # _state = exp_transformer.state_dict()
+            # for k, v in checkpoint['exp_transformer'].items():
+            #     if 'delta' not in k:
+            #         _state[k] = v
+            _state = checkpoint['exp_transformer']
             # _state.update(checkpoint['exp_transformer'])
             exp_transformer.load_state_dict(_state)
         if hie_estimator is not None:
@@ -221,22 +221,22 @@ class Visualizer:
             prediction = np.transpose(prediction, [0, 2, 3, 1])
             images.append((prediction, kp_driving))
         
-        if 'kp_driving_cycled' in out:
+        if 'kp_source_cycled' in out:
             # cycled source image (must be same be normal one)
-            cycled_driving = np.concatenate([driving[1:], driving[[0]]], axis=0)
-            cycled_kp_driving = np.concatenate([kp_driving[1:], kp_driving[[0]]], axis=0)
-            images.append((cycled_driving, cycled_kp_driving))
+            cycled_source = np.concatenate([source[1:], source[[0]]], axis=0)
+            cycled_kp_source = np.concatenate([kp_source[1:], kp_source[[0]]], axis=0)
+            images.append((cycled_source, cycled_kp_source))
             
             # cycyled driven image
-            kp_driving = out['kp_driving_cycled']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
+            kp_source = out['kp_source_cycled']['value'][:, :, :2].data.cpu().numpy()    # 3d -> 2d
             prediction = out['prediction_cycled'].data.cpu().numpy()
             prediction = np.transpose(prediction, [0, 2, 3, 1])
-            images.append((prediction, kp_driving))
+            images.append((prediction, kp_source))
             
         if 'source_mesh_image' in out:
-            
             images.append(np.transpose(out['source_mesh_image'].repeat(1, 3, 1, 1).data.cpu().numpy(), [0,2,3,1]))
             images.append(np.transpose(out['driving_mesh_image'].repeat(1,3,1,1).data.cpu().numpy(), [0, 2, 3,1]))
+            
         ## Occlusion map
         if 'occlusion_map' in out:
             occlusion_map = out['occlusion_map'].data.cpu().repeat(1, 3, 1, 1)

@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--config", default="config/vox-256.yaml", help="path to config")
     parser.add_argument("--mode", default="train", choices=["train",])
-    parser.add_argument("--stage", default=1, type=int, choices=[1, 2, -1])
+    parser.add_argument("--stage", default=1, type=int, choices=[1, 2, 3, -1])
     parser.add_argument("--gen", default="spade", choices=["original", "spade"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")

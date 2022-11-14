@@ -1285,7 +1285,19 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             generator.eval()
             for p in generator.parameters():
                 p.requires_grad = False
-            
+        
+        if self.stage == 3:
+            for name, p in self.exp_transformer.named_parameters():
+                if 'delta_style_extractor_from_mesh' in name or 'delta_heads_post_scale' in name or 'delta_exp_code_decoder' in name or 'delta_decoder' in name:
+                    p.requires_grad = True
+                else:
+                    p.requires_grad = False
+
+            self.exp_transformer.train()
+
+            generator.eval()
+            for p in generator.parameters():
+                p.requires_grad = False
         #     self.id_classifier_scale = train_params['id_classifier_scale']
         #     self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
         #     self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
@@ -1533,7 +1545,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 value = torch.norm(driving_mesh['exp'], p=1, dim=-1).mean()
                 loss_values['expression'] = self.loss_weights['expression'] * value
 
-        elif self.stage == 2:
+        elif self.stage == 2 or self.stage == 3:
             loss_values = {}
             
             bs = len(x['source'])

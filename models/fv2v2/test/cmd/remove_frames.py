@@ -9,9 +9,9 @@ tgt_dir = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/'
 
 dirs = []
 for dir in os.listdir(tgt_dir):
-    if dir.startswith('s2_'):
+    if dir.startswith('s2_209'):
         dirs.append(os.path.join(tgt_dir, dir))
      
 for dir in dirs:
-    shutil.copytree(dir, os.path.join(tgt_dir, 'noframe_' +os.path.basename(dir)), ignore=shutil.ignore_patterns('*frames*'), dirs_exist_ok=True)
+    shutil.copytree(dir, os.path.join(tgt_dir, 'noframe_' + 's2-209' + '_'.join(os.path.basename(dir).split('_')[2:])), ignore=shutil.ignore_patterns('*frames*'), dirs_exist_ok=True)
     print(f'copied {dir}')

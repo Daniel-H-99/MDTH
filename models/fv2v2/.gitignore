@@ -9,3 +9,4 @@ README.md
 *.pt
 log/
 test/res/*
+test/first_frames/*

@@ -234,15 +234,15 @@ class ExpTransformer(nn.Module):
 
 
 
-        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=3)
+        self.delta_style_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.latent_dim // 2, depth=2)
         # self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
-        self.delta_exp_extractor_from_mesh = LSTMEncoder(input_dim=3 * 106, hidden_dim=self.lstm_hidden_dim, output_dim=self.num_heads, num_layer=self.lstm_num_layer)
+        self.delta_exp_extractor_from_mesh = LinearEncoder(input_dim=3 * 106, latent_dim=self.latent_dim, output_dim=self.num_heads, depth=2)
         self.delta_exp_code_decoder = nn.Linear(self.num_heads, self.latent_dim // 2)
         
         self.delta_heads_pre_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         self.delta_heads_post_scale = nn.Parameter(torch.zeros(self.num_heads, 1).requires_grad_(True))
         
-        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=3)
+        self.delta_decoder = LinearEncoder(input_dim=self.latent_dim, latent_dim=self.latent_dim, output_dim=self.num_kp * 3, depth=2)
         
         init.constant_(self.delta_heads_pre_scale, 0)
         init.constant_(self.delta_heads_post_scale, 0)
@@ -254,15 +254,15 @@ class ExpTransformer(nn.Module):
         mp_roi_idx = x['mesh']['MP_ROI_IDX'][0]
         # print(f"value shape: {x['mesh']['value'].shape}")
         # print(f"mp value shape: {x['mesh']['mp_value'].shape}")
-        processed_mesh = torch.cat([x['mesh']['value'][:, :, of_roi_idx] , x['mesh']['mp_value'][:, :, mp_roi_idx]], dim=2)
+        processed_mesh = torch.cat([x['mesh']['value'][:, of_roi_idx] , x['mesh']['mp_value'][:, mp_roi_idx]], dim=1)
         if 'kp' in placeholder:
-            id_embedding = self.id_encoder(processed_mesh[:, 2])
+            id_embedding = self.id_encoder(processed_mesh)
             id_embedding, id_latent = id_embedding['output'], id_embedding['latent']
             output['kp'] = id_embedding
             
         if 'delta_code' in placeholder:
-            mesh_flattened = processed_mesh.flatten(2)
-            style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened[:, 2])
+            mesh_flattened = processed_mesh.flatten(1)
+            style_from_mesh = self.delta_style_extractor_from_mesh(mesh_flattened)
             exp_from_mesh = self.delta_exp_extractor_from_mesh(mesh_flattened)
             
             delta_style_code = style_from_mesh

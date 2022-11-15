@@ -18,10 +18,10 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage2_v3/00000199-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_fc_stage2_v3/00000249-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_fc_stage2_v3/mesh_fc_stage2_v3.yaml'        
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage2_v3/00000199-checkpoint.pth.tar'
+                model: '@checkpoint_path/MDTH/mesh_fc_stage2_v3/00000249-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_fc_stage2_v3/mesh_fc_stage2_v3.yaml'                   
         attr:
             fps: 25

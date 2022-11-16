@@ -18,11 +18,11 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage3_u/00000219-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_u/mesh_fc_stage3_v3_u.yaml'        
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/00000189-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage3_u/00000219-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_u/mesh_fc_stage3_v3_u.yaml'                   
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/00000189-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'                        
         attr:
             fps: 25
     preprocess:
@@ -56,7 +56,7 @@ dynamic:
     input_as_file: True
     inputs:
         pair: 'inputs/vox_eval_group_1_homo.txt'
-    label: 's2u_vox_eval_group_1_homo'
+    label: '189_vox_eval_group_1_homo'
     rewrite: False
     use_transformer: True
     extract_driving_code: True

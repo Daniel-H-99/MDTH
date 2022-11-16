@@ -865,10 +865,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     raw_mesh = source_mesh['raw_value']
     # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
 
-    source_meshes = [source_mesh]
             
     ### stage2
-    source_meshes = preprocess_driving_meshes(source_meshes)
+    source_meshes = [source_mesh]
+    # source_meshes = preprocess_driving_meshes(source_meshes)
     source_mesh = source_meshes[0]
     ##########
 
@@ -1057,7 +1057,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj'].copy()
             mesh['view'] = driving_landmarks[driven_pose_index]['p']['view'].copy()
         else:
-            mesh['U'] = driving_Us[i]
+            mesh['U'] = torch.tensor(driving_landmarks[driven_pose_index]['p']['U'].copy()).float()
             
         mesh['scale'] = SCALE
         
@@ -1082,7 +1082,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         target_meshes.append(SCALE * (mesh['value'][17:] + 1))
 
     ### stage 2
-    driving_meshes = preprocess_driving_meshes(driving_meshes)
+    # driving_meshes = preprocess_driving_meshes(driving_meshes)
 
     # que = mp.Manager().Queue()
 

@@ -18,11 +18,11 @@ config:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage3_u/00000219-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_u/mesh_fc_stage3_v3_u.yaml'        
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/00000189-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage3_u/00000219-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_u/mesh_fc_stage3_v3_u.yaml'                   
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss50/00000189-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'                    
         attr:
             fps: 25
     preprocess:
@@ -55,18 +55,18 @@ dynamic:
     mode: 'pair'
     input_as_file: True
     inputs:
-        pair: 'inputs/vox_eval_group_1_homo.txt'
-    label: 's2u_vox_eval_group_1_homo'
+        pair: 'inputs/vox_eval_group_4_hetero.txt'
+    label: '0_vox_eval_group_4_hetero'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
     save_frames: True
     stage: 2
-    relative_headpose: False
+    relative_headpose: True
     extract_landmarks: False
     preprocess: False
     skip_eval: False
-    load_exp: ''
+    load_exp: '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/0_vox_eval_group_4_hetero_2022-11-06T04:58:16/materials.pt'
 
     
     

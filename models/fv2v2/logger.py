@@ -73,8 +73,8 @@ class Logger:
         if exp_transformer is not None:
             # _state = exp_transformer.state_dict()
             # for k, v in checkpoint['exp_transformer'].items():
-                # if 'delta' not in k:
-                #     _state[k] = v
+            #     if 'delta' not in k:
+            #         _state[k] = v
             _state = checkpoint['exp_transformer']
             # _state.update(checkpoint['exp_transformer'])
             exp_transformer.load_state_dict(_state)

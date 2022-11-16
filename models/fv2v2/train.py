@@ -28,6 +28,7 @@ def train_transformer(config, stage, exp_transformer, generator, discriminator, 
                 delta_params.append(p)
         optimizer = torch.optim.Adam(delta_params, lr=train_params['lr_exp_transformer'], betas=(0.5, 0.999))
         optimizer_generator = None
+
     # elif stage == 3:
     #     delta_params = []
     #     for name, p in exp_transformer.named_parameters():

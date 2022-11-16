@@ -103,7 +103,8 @@ class FramesDataset3S2(Dataset):
         self.landmark_model = LandmarkModel(landmarkmodel_path)
         self.ref_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
         self.ref = torch.load(self.ref_path)
-        
+        self.L = 2
+
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):
             # assert os.path.exists(os.path.join(root_dir, 'test'))
@@ -246,7 +247,7 @@ class FramesDataset3S2(Dataset):
                 frames = sorted(os.listdir(path))
                 num_frames = len(frames)
                 
-                if num_frames < 5:
+                if num_frames < 3:
                     continue
     
                 magic_num = int(datetime.now().timestamp())
@@ -254,7 +255,7 @@ class FramesDataset3S2(Dataset):
 
                 frame_idx[0] = (frame_idx[0] + magic_num) % num_frames
                 frame_idx[1] = (frame_idx[1] + 2 * magic_num) % num_frames
-                driving_seq_idx = self.get_seq_idx(frame_idx[1], num_frames)
+                driving_seq_idx = self.get_seq_idx(frame_idx[1], num_frames=num_frames, L=self.L)
 
                 frame_idx = [frame_idx[0]] + driving_seq_idx    # 6
                 raw_video_array = [io.imread(os.path.join(path, frames[idx])) for idx in frame_idx]
@@ -270,6 +271,7 @@ class FramesDataset3S2(Dataset):
 
                     mesh_mp = extract_mesh_normalize(img_as_ubyte(frame), self.ref)
                     mesh_mp['value'] = mesh_mp['value'] * 2 / L + A
+            
                     # right_iris = mesh_mp['value'][RIGHT_IRIS_IDX].mean(dim=0) # 3
                     # left_iris = mesh_mp['value'][LEFT_IRIS_IDX].mean(dim=0) # 3
                     # print(f'right_iris shape: {right_iris.shape}')
@@ -355,19 +357,23 @@ class FramesDataset3S2(Dataset):
 
         out = {}
         # if self.is_train:
+        C = self.L // 2
         source = np.array(video_array[0], dtype='float32')
-        driving = np.array(video_array[3], dtype='float32')
+        driving = np.array(video_array[1 + C], dtype='float32')
         out['driving'] = driving.transpose((2, 0, 1))
         out['source'] = source.transpose((2, 0, 1))
 
         source_mesh = meshes[0]
-        source_mesh['value'] = torch.tensor(source_mesh['value']).unsqueeze(0).repeat(5, 1, 1)
-        source_mesh['mp_value'] = torch.tensor(source_mesh['mp_value']).unsqueeze(0).repeat(5, 1, 1)
-        driving_mesh = meshes[3]
+        source_mesh['value'] = torch.tensor(source_mesh['value']).unsqueeze(0).repeat(self.L, 1, 1)
+        source_mesh['mp_value'] = torch.tensor(source_mesh['mp_value']).unsqueeze(0).repeat(self.L, 1, 1)
+        source_mesh['C'] = C
+        driving_mesh = meshes[1 + C]
         driving_value_seq = torch.stack([torch.tensor(m['value']).float() for m in meshes[1:]], dim=0)
         driving_mp_value_seq = torch.stack([torch.tensor(m['mp_value']).float() for m in meshes[1:]], dim=0)
         driving_mesh['value'] = driving_value_seq
         driving_mesh['mp_value'] = driving_mp_value_seq
+        driving_mesh['C'] = C
+
         out['source_mesh'] = source_mesh
         out['driving_mesh'] = driving_mesh
         out['hit'] = 0

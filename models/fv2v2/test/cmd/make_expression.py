@@ -4,7 +4,7 @@ import os
 NUM_HEADS = 128
 START = -1
 END = 1
-SLICES = 100
+SLICES = 25
 result_dir = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/expressions'
 
 def write_contents(h, start, end, slices):

@@ -661,11 +661,13 @@ def preprocess_driving_meshes(meshes, L=5):
         mp_seq = torch.stack(mp_seq, dim=0)
         mesh['value'] = seq
         mesh['mp_value'] = mp_seq
+        mesh['C'] = L // 2
     return output
 
 
 def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list):
     st = time.time()
+    window = 5
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -730,7 +732,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
     source_meshes = [source_mesh]
             
     ### stage2
-    source_meshes = preprocess_driving_meshes(source_meshes)
+    source_meshes = preprocess_driving_meshes(source_meshes, L=window)
     source_mesh = source_meshes[0]
     ##########
 
@@ -739,7 +741,8 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
     driving_exp_head = torch.linspace(driving_info.start, driving_info.end, driving_info.slices)
     num_frames = len(driving_exp_head)
     driving_expression = torch.zeros(num_frames, driving_info.num_heads)
-    driving_expression[:, driving_info.head] = driving_exp_head
+    roi_heads = torch.range(0, driving_info.num_heads)[:driving_info.head].long()
+    driving_expression[:, roi_heads] = driving_exp_head.unsqueeze(1).repeat(1, driving_info.head)
 
     NODES = 1
     data_per_node = math.ceil(len(driving_expression) / NODES)
@@ -752,7 +755,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
 
     for i, frame in enumerate(predictions):
         frame = np.ascontiguousarray(img_as_ubyte(frame))
-        cv2.putText(img=frame, text=f'head: {driving_info.head}, exp: {driving_exp_head[i]}', fontFace=cv2.FONT_ITALIC, org=(192, 64), fontScale=2, color=(255, 255, 255), thickness=1)
+        cv2.putText(img=frame, text=f'exp: {driving_exp_head[i]}', fontFace=cv2.FONT_ITALIC, org=(0, 32), fontScale=1, color=(255, 255, 255), thickness=2)
         styled_frames.append(frame)
 
     predictions = styled_frames
@@ -764,6 +767,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
 
 def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
     st = time.time()
+    window=2
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -868,7 +872,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             
     ### stage2
     source_meshes = [source_mesh]
-    # source_meshes = preprocess_driving_meshes(source_meshes)
+    source_meshes = preprocess_driving_meshes(source_meshes, L=window)
     source_mesh = source_meshes[0]
     ##########
 
@@ -1082,7 +1086,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         target_meshes.append(SCALE * (mesh['value'][17:] + 1))
 
     ### stage 2
-    # driving_meshes = preprocess_driving_meshes(driving_meshes)
+    driving_meshes = preprocess_driving_meshes(driving_meshes, L=window)
 
     # que = mp.Manager().Queue()
 

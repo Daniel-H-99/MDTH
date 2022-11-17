@@ -252,7 +252,7 @@ class ExpTransformer(nn.Module):
         output = {}
         of_roi_idx = x['mesh']['OPENFACE_ROI_IDX'][0]
         mp_roi_idx = x['mesh']['MP_ROI_IDX'][0]
-        C = x['mesh']['C'][0]
+        C = x['mesh']['C'][0].long()
         # print(f"value shape: {x['mesh']['value'].shape}")
         # print(f"mp value shape: {x['mesh']['mp_value'].shape}")
         processed_mesh = torch.cat([x['mesh']['value'][:, :, of_roi_idx] , x['mesh']['mp_value'][:, :, mp_roi_idx]], dim=2)

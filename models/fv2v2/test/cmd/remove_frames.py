@@ -6,7 +6,9 @@ import os
 # tgt_dir = '/home/server19/minyeong_workspace/LIA/test/res/'
 # tgt_dir = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/'
 # tgt_dir = '/home/server19/minyeong_workspace/TPSMM/test/res'
+# tgt_dir = '/home/server19/minyeong_workspace/MRAA/test/res/'
 tgt_dir = '/home/server19/minyeong_workspace/FOM/test/res/'
+
 
 dirs = []
 for dir in os.listdir(tgt_dir):

@@ -39,7 +39,8 @@ METRIC_META = {
     'PSNR': MetricItem('PSNR', 'PSNR', 'frames'),
     'AED': MetricItem('AED', 'AED', 'frames', True),
     'AUCON': MetricItem('AUCON', 'AUCON', 'frames'),
-    'AUACC': MetricItem('AUACC', 'AUACC', 'frames')
+    'AUACC': MetricItem('AUACC', 'AUACC', 'frames'),
+    'FID_SRC': MetricItem('FID', 'FID', 'frames', True),
 }
 
 class AttrDict(dict):
@@ -96,7 +97,7 @@ def setup_exp(args, config):
 		materials['metric_names'] = {
 		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR', 'AED', 'AUCON', 'AUACC'],
 		# 'same_identity': ['AUCON', 'AUACC'],
-		'cross_identity': ['AED', 'AUCON', 'AUACC']
+		'cross_identity': ['FID_SRC', 'AED', 'AUCON', 'AUACC']
 		}
 		materials['logger'] = make_logger(cwd)
 		materials = AttrDict.from_nested_dicts(materials)
@@ -112,7 +113,7 @@ def setup_exp(args, config):
 		setattr(loaded_materials, 'metric_names', AttrDict.from_nested_dicts({
 		'same_identity': ['L1', 'FID', 'SSIM', 'LPIPS', 'MS-SSIM', 'AKD', 'PSNR', 'AED', 'AUCON', 'AUACC'],
 		# 'same_identity': ['AUCON', 'AUACC'],
-		'cross_identity': ['AED', 'AUCON', 'AUACC']
+		'cross_identity': ['FID_SRC', 'AED', 'AUCON', 'AUACC']
 		}))
   
 		setattr(materials, 'loaded_materials', loaded_materials)

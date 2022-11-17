@@ -100,8 +100,9 @@ def run_aggregation(materials):
 	cwd = materials.cwd
 	output_video = os.path.join(materials.cwd, 'aggregation.mp4')
 	session_videos = [os.path.join(cwd, session, 'video.mp4') for session in materials.session_names]
-	concat_cmd = '-i '.join([f'"{os.path.join(cwd, session, "video.mp4")}"' for session in materials.session_names])
-	cmd = f'sudo ffmpeg {concat_cmd} -y {output_video}'
+	concat_cmd = ' -i '.join([f'"{os.path.join(cwd, session, "video.mp4")}"' for session in materials.session_names])
+	cmd = f'ffmpeg -i {concat_cmd} -filter_complex hstack=inputs={len(session_videos)} -y "{output_video}"'
+	print(f'cmd: {cmd}')
 	# while True:
 	# 	continue
 	os.system(cmd)

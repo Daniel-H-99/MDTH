@@ -103,7 +103,7 @@ class FramesDataset3S2(Dataset):
         self.landmark_model = LandmarkModel(landmarkmodel_path)
         self.ref_path = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/reference_mesh.pt'
         self.ref = torch.load(self.ref_path)
-        self.L = 2
+        self.L = 3
 
         # self.reference_dict = torch.load('mesh_dict_reference.pt')
         if os.path.exists(os.path.join(root_dir, 'train')):

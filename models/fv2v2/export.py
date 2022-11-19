@@ -667,7 +667,7 @@ def preprocess_driving_meshes(meshes, L=5):
 
 def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list):
     st = time.time()
-    window = 5
+    window = 3
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -767,7 +767,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
 
 def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
     st = time.time()
-    window=2
+    window=3
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 

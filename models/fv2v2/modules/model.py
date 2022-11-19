@@ -1289,6 +1289,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
         if self.stage == 3:
             for name, p in self.exp_transformer.named_parameters():
                 if 'delta_style_extractor_from_mesh' in name or 'delta_heads_post_scale' in name or 'delta_exp_code_decoder' in name or 'delta_decoder' in name:
+                    print(f'parameter: {name}')
                     p.requires_grad = True
                 else:
                     p.requires_grad = False
@@ -1631,17 +1632,17 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             if cycled_drive:
                 ## cycled expression drive
                 delta_style_code = tf_output['src_embedding']['delta_style_code']
-                delta_exp_code = tf_output['src_embedding']['delta_exp_code']
+                delta_exp_code = tf_output['drv_embedding']['delta_exp_code']
                 delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
-                src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
-                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': - src_delta + src_delta_cycled}
+                drv_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
+                driving_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': - src_delta + drv_delta_cycled}
 
-                kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
+                kp_driving_cycled = keypoint_transformation(kp_canonical, driving_mesh_cycled)
 
-                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
+                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving_cycled)
                 for k, v in list(generated_cycled.items()):
                     generated[f'{k}_cycled'] = v
-                generated['kp_source_cycled'] = kp_source_cycled
+                generated['kp_driving_cycled'] = kp_driving_cycled
                 
 
             if self.loss_weights['log'] != 0:

@@ -652,7 +652,7 @@ def preprocess_driving_meshes(meshes, L=5):
     for i, mesh in enumerate(output):
         seq = []
         mp_seq = []
-        for j in range(i - L // 2, i - L // 2 + L):
+        for j in range(i - L + 1, i + 1):
             j = max(0, j)
             j = min(num_meshes - 1, j)
             seq.append(meshes[j]['value'])
@@ -661,7 +661,7 @@ def preprocess_driving_meshes(meshes, L=5):
         mp_seq = torch.stack(mp_seq, dim=0)
         mesh['value'] = seq
         mesh['mp_value'] = mp_seq
-        mesh['C'] = L // 2
+        mesh['C'] = L - 1
     return output
 
 

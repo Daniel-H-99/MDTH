@@ -1,0 +1,3 @@
+CUDA_VISIBLE_DEVICES=0 python test.py --config config/config_hetero_2_v4.yaml
+CUDA_VISIBLE_DEVICES=0 python test.py --config config/config_hetero_3_v4.yaml
+CUDA_VISIBLE_DEVICES=0 python test.py --config config/config_hetero_4_v4.yaml

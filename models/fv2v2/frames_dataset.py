@@ -357,7 +357,7 @@ class FramesDataset3S2(Dataset):
 
         out = {}
         # if self.is_train:
-        C = self.L // 2
+        C = self.L - 1
         source = np.array(video_array[0], dtype='float32')
         driving = np.array(video_array[1 + C], dtype='float32')
         out['driving'] = driving.transpose((2, 0, 1))

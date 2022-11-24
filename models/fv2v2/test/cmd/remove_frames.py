@@ -12,7 +12,7 @@ tgt_dir = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/'
 
 dirs = []
 for dir in os.listdir(tgt_dir):
-    if dir.startswith('v3.2'):
+    if dir.startswith('v3.2') and 'combi' not in dir:
         dirs.append(os.path.join(tgt_dir, dir))
      
 for dir in dirs:

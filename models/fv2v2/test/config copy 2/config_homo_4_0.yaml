@@ -13,16 +13,16 @@ config:
                 dir: '@checkpoint_path/landmark'
             he_estimator:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.1/mesh_fc_stage3_v3.1.yaml'       
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'          
             kp_extractor:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.1/mesh_fc_stage3_v3.1.yaml'         
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.2/00000309-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.2/mesh_fc_stage3_v3.2.yaml'        
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/00000069-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'         
             exp_transformer:
-                model: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.2/00000309-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.2/mesh_fc_stage3_v3.2.yaml'                   
+                model: '@checkpoint_path/MDTH/mesh_mesh_fc_v2_logloss0/00000069-checkpoint.pth.tar'
+                config: '@checkpoint_path/MDTH/mesh_mesh_fc_v2/mesh_img_fc_stage2.yaml'                
         attr:
             fps: 25
     preprocess:
@@ -55,18 +55,18 @@ dynamic:
     mode: 'pair'
     input_as_file: True
     inputs:
-        pair: 'inputs/vox_eval_group_2_hetero.txt'
-    label: 'v3.2_vox_eval_group_2_hetero'
+        pair: 'inputs/vox_eval_group_4_homo.txt'
+    label: '0_vox_eval_group_4_homo'
     rewrite: False
     use_transformer: True
     extract_driving_code: True
     save_frames: True
     stage: 2
-    relative_headpose: True
+    relative_headpose: False
     extract_landmarks: False
     preprocess: False
     skip_eval: False
-    load_exp: ''
+    load_exp: '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test/res/0_vox_eval_group_4_homo_2022-11-07T17:20:49/materials.pt'
 
     
     

@@ -13,10 +13,10 @@ config:
                 dir: '@checkpoint_path/landmark'
             he_estimator:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.1/mesh_fc_stage3_v3.1.yaml'       
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'          
             kp_extractor:
                 model: '@checkpoint_path/fv2v/00000189-checkpoint.pth.tar'
-                config: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.1/mesh_fc_stage3_v3.1.yaml'         
+                config: '@checkpoint_path/MDTH/mesh_img_fc_nolog_stage2/mesh_img_fc_nolog_stage2.yaml'         
             generator:
                 model: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.2/00000309-checkpoint.pth.tar'
                 config: '@checkpoint_path/MDTH/mesh_fc_stage3_v3.2/mesh_fc_stage3_v3.2.yaml'        

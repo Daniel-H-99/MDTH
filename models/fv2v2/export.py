@@ -339,12 +339,12 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
-    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    # R_xs_adapted = R_xs
-    # R_ys_adapted = R_ys
-    # R_zs_adapted = R_zs
+    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
+    # R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    R_xs_adapted = R_xs
+    R_ys_adapted = R_ys
+    R_zs_adapted = R_zs
     
     R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy())).float()
     R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy())).float()
@@ -373,10 +373,10 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
     t_xs_adapted = adapt_values(t_x_source, t_xs, minimum=32, maximum=224, center_align=True)
     t_ys_adapted = adapt_values(t_y_source, t_ys, minimum=32, maximum=224, center_align=True)
-    # t_zs_adapted = adapt_values(t_z_source, t_zs, center_align=True)
+    t_zs_adapted = adapt_values(t_z_source, t_zs, center_align=True)
     # t_xs_adapted = torch.tensor(t_xs)
     # t_ys_adapted = torch.tensor(t_ys)
-    t_zs_adapted = torch.tensor(t_zs)
+    # t_zs_adapted = torch.tensor(t_zs)
     
     t_xs_filtered = torch.tensor(filter_values(t_xs_adapted.numpy())).float()
     t_ys_filtered = torch.tensor(filter_values(t_ys_adapted.numpy())).float()

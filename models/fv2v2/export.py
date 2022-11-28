@@ -397,7 +397,7 @@ def filter_mesh(meshes, source_mesh, SCALE):
         r = R.from_matrix(rot_src[:3, :3])
 
         rot_src[:3, :3] = new_R.numpy().astype(np.float32)
-        # rot_src[:3, 3] = new_t.numpy().astype(np.float32)
+        rot_src[:3, 3] = new_t.numpy().astype(np.float32)
         
         final_U = rot_src.T @ source_mesh['proj'].T @ source_mesh['viewport'].T
         # final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
@@ -768,7 +768,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
 
 def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
     st = time.time()
-    window=3
+    window=5
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -1117,11 +1117,11 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     
     # mesh styling
     meshed_frames = []
-    # predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min()) * 255
-    # predictions = np.clip(predictions, 0, 255)
+    predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min()) * 255
+    predictions = np.clip(predictions, 0, 255).astype(np.uint8)
     for i, frame in enumerate(predictions):
         # frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255)
-        frame = np.ascontiguousarray(img_as_ubyte(frame))
+        # frame = np.ascontiguousarray(img_as_ubyte(frame))
         if i >= len(target_meshes):
             continue
         mesh = target_meshes[i]

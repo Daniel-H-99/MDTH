@@ -339,12 +339,12 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
-    # R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    # R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    R_xs_adapted = R_xs
-    R_ys_adapted = R_ys
-    R_zs_adapted = R_zs
+    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
+    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_xs_adapted = R_xs
+    # R_ys_adapted = R_ys
+    # R_zs_adapted = R_zs
     
     R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy())).float()
     R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy())).float()
@@ -401,7 +401,7 @@ def filter_mesh(meshes, source_mesh, SCALE):
         
         final_U = rot_src.T @ source_mesh['proj'].T @ source_mesh['viewport'].T
         final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
-        # final_U[3, 3]
+        final_U[3, 2] = source_mesh['t'][2]
         print(f'drv proj: {source_mesh["proj"]}')
         print(f'drv proj: {meshes[0]["proj"]}')
         # while True:
@@ -622,7 +622,7 @@ def make_animation(rank, gpu_list, source_image, driving_video, source_mesh, dri
                 
             # {'value': value, 'jacobian': jacobian}
             kp_source = keypoint_transformation(kp_canonical, _source_mesh)
-            kp_driving = keypoint_transformation(kp_canonical_drv, _driving_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, _driving_mesh)
             
             kp_norm = kp_driving
 
@@ -668,7 +668,7 @@ def preprocess_driving_meshes(meshes, L=5):
 
 def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list):
     st = time.time()
-    window = 3
+    window = 5
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 

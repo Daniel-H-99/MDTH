@@ -8,6 +8,7 @@ README.md
 *.pth
 *.pt
 log/
+test/*
 test/res/*
 test/first_frames/*
 test/demos/

@@ -6,7 +6,7 @@ from tqdm import tqdm
 root_dir = 'demos'
 baseline_root_dir = os.path.join(root_dir,'baseline')
 # baselines = ['MMRA','TPSMM', 'LIA', 'OURS', 'OURS_NOLOG']
-baselines = ['TPSMM', 'LIA', 'OURS']
+baselines = ['TPSMM', 'LIA', 'OURS', 'OURS_NOLOG']
 output_root_dir = os.path.join(root_dir, 'output')
 output_video_dir = os.path.join(output_root_dir, 'video')
 label_file_path = os.path.join(output_root_dir, 'labels.txt')

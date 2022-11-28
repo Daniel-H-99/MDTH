@@ -338,13 +338,14 @@ def filter_mesh(meshes, source_mesh, SCALE):
     R_zs = torch.tensor(R_zs).float()
 
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
+    # R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
-    # R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    # R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    R_xs_adapted = R_xs
-    R_ys_adapted = R_ys
-    R_zs_adapted = R_zs
+    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
+    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_xs_adapted = R_xs
+    # R_ys_adapted = R_ys
+    # R_zs_adapted = R_zs
     
     R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy())).float()
     R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy())).float()
@@ -367,6 +368,7 @@ def filter_mesh(meshes, source_mesh, SCALE):
     # t_zs = final_Us[:, 3, 2]
 
     t_x_source, t_y_source, t_z_source = source_mesh['t']
+    # t_x_source, t_y_source, t_z_source = source_mesh['t']
     t_xs = torch.tensor(np.stack(t_xs)).float()
     t_ys = torch.tensor(np.stack(t_ys)).float()
     t_zs = torch.tensor(np.stack(t_zs)).float()
@@ -398,9 +400,11 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
         rot_src[:3, :3] = new_R.numpy().astype(np.float32)
         # rot_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
-        
+        print(f'raw t: {source_mesh["U"][3, :3]}')
+        print(f'driving t: {new_t}')
         final_U = rot_src.T @ source_mesh['proj'].T @ source_mesh['viewport'].T
         final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
+        # final_U[3, 3]
         print(f'drv proj: {source_mesh["proj"]}')
         print(f'drv proj: {meshes[0]["proj"]}')
         # while True:
@@ -712,7 +716,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
     source_mesh['view'] = pose_p['view'].copy()
     source_mesh['viewport'] = pose_p['viewport'].copy()
     source_mesh['R'] = pose_p['view'][:3, :3]
-    source_mesh['t'] = pose_p['viewport'][:3, 3].copy()
+    source_mesh['t'] = pose_p['U'][3, :3].copy()
     source_mesh['U'] = pose_p['U']
     source_mesh['scale'] = SCALE
     source_mesh['he_R'] = source_landmarks['he_p']['R']
@@ -1051,8 +1055,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             final_trans = np.array([trans_x, trans_y, trans_z])
 
             # use driving trans
-            final_trans = driving_pose['t'][:3]
-            print(f'final_trans: {final_trans}')
+            # final_trans = driving_pose['t'][:3]
+            # print(f'final_trans: {final_trans}')
             final_trans = driving_landmarks[driven_pose_index]['p']['U'].copy()[3, :3]
             # print(f'pose_idx: {driven_pose_index}')
             # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
@@ -1116,9 +1120,11 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     
     # mesh styling
     meshed_frames = []
-
+    predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min()) * 255
+    predictions = np.clip(predictions, 0, 255).astype(np.uint8)
     for i, frame in enumerate(predictions):
-        frame = np.ascontiguousarray(img_as_ubyte(frame))
+        # frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255)
+        # frame = np.ascontiguousarray(img_as_ubyte(frame))
         if i >= len(target_meshes):
             continue
         mesh = target_meshes[i]

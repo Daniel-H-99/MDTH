@@ -412,4 +412,3 @@ class HEEstimator(nn.Module):
         # t = t[:, [1, 0, 2]]
         
         return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'R': R, 'out': out}
-

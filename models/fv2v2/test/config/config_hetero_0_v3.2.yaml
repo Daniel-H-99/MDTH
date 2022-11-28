@@ -60,12 +60,12 @@ dynamic:
     rewrite: False
     use_transformer: True
     extract_driving_code: True
-    save_frames: True
+    save_frames: False
     stage: 2
     relative_headpose: True
     extract_landmarks: False
     preprocess: False
-    skip_eval: False
+    skip_eval: True
     load_exp: ''
 
     

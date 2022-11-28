@@ -319,8 +319,10 @@ def filter_mesh(meshes, source_mesh, SCALE):
     t_zs = []
     
     ts = []
+    Rs = []
     for i, mesh in enumerate(meshes):
         he_R, t = mesh['R'], mesh['t']
+        Rs.append(he_R)
         ts.append(t)
         R_x, R_y, R_z = matrix2euler(he_R)
         t_x, t_y, t_z = t
@@ -337,37 +339,51 @@ def filter_mesh(meshes, source_mesh, SCALE):
 
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
-    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
-    R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), center_align=True)
+    # R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    # R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
+    R_xs_adapted = R_xs
+    R_ys_adapted = R_ys
+    R_zs_adapted = R_zs
     
     R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy())).float()
     R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy())).float()
     R_zs_filtered = torch.tensor(filter_values(R_zs_adapted.numpy())).float()
+    # R_xs_filtered = R_xs_adapted
+    # R_ys_filtered = R_ys_adapted
+    # R_zs_filtered = R_zs_adapted
     
     new_Rs = []
 
     for R_x, R_y, R_z in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered):
         new_R = torch.tensor(euler2matrix([R_x, R_y, R_z])).float()
         new_Rs.append(new_R)
-
+    
     new_Rs = torch.stack(new_Rs, dim=0).numpy()
-    ts = np.stack(ts, axis=0)
-    final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (-source_mesh['s'] * new_Rs @ source_mesh['b'] + ts[:, :, np.newaxis] + 1)], axis=2).transpose(0, 2, 1)).float()
-    t_xs = final_Us[:, 3, 0]
-    t_ys = final_Us[:, 3, 1]
-    t_zs = final_Us[:, 3, 2]
+    # ts = np.stack(ts, axis=0)
+    # final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (-source_mesh['s'] * new_Rs @ source_mesh['b'] + ts[:, :, np.newaxis] + 1)], axis=2).transpose(0, 2, 1)).float()
+    # t_xs = final_Us[:, 3, 0]
+    # t_ys = final_Us[:, 3, 1]
+    # t_zs = final_Us[:, 3, 2]
 
     t_x_source, t_y_source, t_z_source = source_mesh['t']
+    t_xs = torch.tensor(np.stack(t_xs)).float()
+    t_ys = torch.tensor(np.stack(t_ys)).float()
+    t_zs = torch.tensor(np.stack(t_zs)).float()
 
     t_xs_adapted = adapt_values(t_x_source, t_xs, minimum=32, maximum=224, center_align=True)
     t_ys_adapted = adapt_values(t_y_source, t_ys, minimum=32, maximum=224, center_align=True)
     t_zs_adapted = adapt_values(t_z_source, t_zs, center_align=True)
-    
+    # t_xs_adapted = torch.tensor(t_xs)
+    # t_ys_adapted = torch.tensor(t_ys)
+    # t_zs_adapted = torch.tensor(t_zs)
     
     t_xs_filtered = torch.tensor(filter_values(t_xs_adapted.numpy())).float()
     t_ys_filtered = torch.tensor(filter_values(t_ys_adapted.numpy())).float()
     t_zs_filtered = torch.tensor(filter_values(t_zs_adapted.numpy())).float()
+    # t_xs_filtered = t_xs_adapted
+    # t_ys_filtered = t_ys_adapted
+    # t_zs_filtered = t_zs_adapted
     
     for R_x, R_y, R_z, t_x, t_y, t_z, mesh in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered, t_xs_filtered, t_ys_filtered, t_zs_filtered, meshes):
         new_R = torch.tensor(euler2matrix([R_x, R_y, R_z])).float()
@@ -381,10 +397,15 @@ def filter_mesh(meshes, source_mesh, SCALE):
         r = R.from_matrix(rot_src[:3, :3])
 
         rot_src[:3, :3] = new_R.numpy().astype(np.float32)
-
-        trans_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
+        # rot_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
         
-        final_U = rot_src.T @  source_mesh['proj'].T @ trans_src.T
+        final_U = rot_src.T @ source_mesh['proj'].T @ source_mesh['viewport'].T
+        final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
+        # final_U[3, 3]
+        print(f'drv proj: {source_mesh["proj"]}')
+        print(f'drv proj: {meshes[0]["proj"]}')
+        # while True:
+        #     continue
         mesh['U'] = torch.tensor(final_U).float()
 
 def get_mesh_image_section(mesh, frame_shape, section_indices, sections_indices_splitted):
@@ -641,11 +662,13 @@ def preprocess_driving_meshes(meshes, L=5):
         mp_seq = torch.stack(mp_seq, dim=0)
         mesh['value'] = seq
         mesh['mp_value'] = mp_seq
+        mesh['C'] = L // 2
     return output
 
 
 def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list):
     st = time.time()
+    window = 3
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -690,7 +713,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
     source_mesh['view'] = pose_p['view'].copy()
     source_mesh['viewport'] = pose_p['viewport'].copy()
     source_mesh['R'] = pose_p['view'][:3, :3]
-    source_mesh['t'] = pose_p['viewport'][:3, 3].copy()
+    source_mesh['t'] = pose_p['U'][3, :3].copy()
     source_mesh['U'] = pose_p['U']
     source_mesh['scale'] = SCALE
     source_mesh['he_R'] = source_landmarks['he_p']['R']
@@ -710,7 +733,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
     source_meshes = [source_mesh]
             
     ### stage2
-    source_meshes = preprocess_driving_meshes(source_meshes)
+    source_meshes = preprocess_driving_meshes(source_meshes, L=window)
     source_mesh = source_meshes[0]
     ##########
 
@@ -719,7 +742,8 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
     driving_exp_head = torch.linspace(driving_info.start, driving_info.end, driving_info.slices)
     num_frames = len(driving_exp_head)
     driving_expression = torch.zeros(num_frames, driving_info.num_heads)
-    driving_expression[:, driving_info.head] = driving_exp_head
+    roi_heads = torch.range(0, driving_info.num_heads)[:driving_info.head].long()
+    driving_expression[:, roi_heads] = driving_exp_head.unsqueeze(1).repeat(1, driving_info.head)
 
     NODES = 1
     data_per_node = math.ceil(len(driving_expression) / NODES)
@@ -732,7 +756,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
 
     for i, frame in enumerate(predictions):
         frame = np.ascontiguousarray(img_as_ubyte(frame))
-        cv2.putText(img=frame, text=f'head: {driving_info.head}, exp: {driving_exp_head[i]}', fontFace=cv2.FONT_ITALIC, org=(192, 64), fontScale=2, color=(255, 255, 255), thickness=1)
+        cv2.putText(img=frame, text=f'exp: {driving_exp_head[i]}', fontFace=cv2.FONT_ITALIC, org=(0, 32), fontScale=1, color=(255, 255, 255), thickness=2)
         styled_frames.append(frame)
 
     predictions = styled_frames
@@ -744,6 +768,7 @@ def test_model_with_exp(opt, generator, exp_transformer, kp_extractor, he_estima
 
 def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_list, use_transformer=True, extract_driving_code=False, stage=1, relative_headpose=True, save_frames=True):
     st = time.time()
+    window=3
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -845,10 +870,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     raw_mesh = source_mesh['raw_value']
     # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)
 
-    source_meshes = [source_mesh]
             
     ### stage2
-    source_meshes = preprocess_driving_meshes(source_meshes)
+    source_meshes = [source_mesh]
+    source_meshes = preprocess_driving_meshes(source_meshes, L=window)
     source_mesh = source_meshes[0]
     ##########
 
@@ -997,6 +1022,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         mesh['U'] = torch.tensor(driving_landmarks[driven_pose_index]['p']['U']).float()
         # mesh['scale'] = driving_landmarks[driven_pose_index]['p']['scale']
         if relative_headpose:
+            
             ### manipulate head pose ###
             driving_pose = driving_landmarks[driven_pose_index]['he_p']
 
@@ -1011,10 +1037,13 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             delta_angle = np.array([angle_x, angle_y, angle_z])
             delta_r = R.from_rotvec(delta_angle)
             final_r = delta_r.as_matrix() @ r.as_matrix()
-
+        
             # use driving R
             final_r = driving_pose['R']
             rot_src[:3, :3] = final_r
+            
+            final_r = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, :3]
+            
             mesh['R'] = final_r
 
             trans_x = 0
@@ -1024,8 +1053,16 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
             # use driving trans
             final_trans = driving_pose['t'][:3]
+            print(f'final_trans: {final_trans}')
+            final_trans = driving_landmarks[driven_pose_index]['p']['U'].copy()[3, :3]
+            # print(f'pose_idx: {driven_pose_index}')
+            # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
             mesh['t'] = final_trans
-            mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj']
+            mesh['viewport'] = driving_landmarks[driven_pose_index]['p']['viewport'].copy()
+            mesh['proj'] = driving_landmarks[driven_pose_index]['p']['proj'].copy()
+            mesh['view'] = driving_landmarks[driven_pose_index]['p']['view'].copy()
+        else:
+            mesh['U'] = torch.tensor(driving_landmarks[driven_pose_index]['p']['U'].copy()).float()
             
         mesh['scale'] = SCALE
         
@@ -1050,7 +1087,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         target_meshes.append(SCALE * (mesh['value'][17:] + 1))
 
     ### stage 2
-    driving_meshes = preprocess_driving_meshes(driving_meshes)
+    driving_meshes = preprocess_driving_meshes(driving_meshes, L=window)
 
     # que = mp.Manager().Queue()
 
@@ -1080,8 +1117,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     
     # mesh styling
     meshed_frames = []
-
+    # predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min()) * 255
+    # predictions = np.clip(predictions, 0, 255)
     for i, frame in enumerate(predictions):
+        # frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255)
         frame = np.ascontiguousarray(img_as_ubyte(frame))
         if i >= len(target_meshes):
             continue

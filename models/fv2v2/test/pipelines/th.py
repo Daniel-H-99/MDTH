@@ -93,7 +93,7 @@ class THPipeline():
             reader.close()
             
             for i, frame in enumerate(driving_video):
-                imageio.imwrite(os.path.join(frames_dir, '{:05d}.png'.format(i)), frame)
+                imageio.imwrite(os.path.join(frames_dir, '{:07d}.png'.format(i)), frame)
                 
             
         print(f'extract_landmarks: {extract_landmarks}')

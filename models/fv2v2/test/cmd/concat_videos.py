@@ -4,13 +4,15 @@ import numpy as np
 from tqdm import tqdm
 
 root_dir = 'demos'
-baseline_root_dir = os.path.join(root_dir,'baseline')
+baseline_root_dir = os.path.join(root_dir,'baseline_k-actors')
 # baselines = ['MMRA','TPSMM', 'LIA', 'OURS', 'OURS_NOLOG']
-baselines = ['TPSMM', 'LIA', 'OURS', 'OURS_NOLOG']
-output_root_dir = os.path.join(root_dir, 'output')
+baselines = ['FT', '3.2.1']
+output_root_dir = os.path.join(root_dir, 'output_k-actors_ours')
 output_video_dir = os.path.join(output_root_dir, 'video')
 label_file_path = os.path.join(output_root_dir, 'labels.txt')
 ROOT = '/home/server19/minyeong_workspace/MDTH/models/fv2v2/test'
+os.makedirs(output_root_dir, exist_ok=True)
+os.makedirs(output_video_dir, exist_ok=True)
 
 def construct_video_list(baseline_dir):
     res = []
@@ -61,7 +63,10 @@ def construct_video_dict(vid_list):
     return res
 
 def get_src_drv_path(src_dir, drv_dir):
-    src_frame_path = os.path.join(src_dir, 'frames', '0000000.png')
+    if 'frames' in src_dir:
+        src_frame_path = os.path.join(src_dir, 'frames', '0000000.png')
+    else:
+        src_frame_path = os.path.join(src_dir, 'image.png')
     drv_frames_dir = os.path.join(drv_dir, 'frames')
     video_path = os.path.join(drv_dir, 'video.mp4')
     if not os.path.exists(video_path):
@@ -98,7 +103,7 @@ def make_concat_video_cmd(output_name, src_path, drv_path, result_path_list):
 
 def main():
     print(f'started')
-    ours_dir = os.path.join(baseline_root_dir, 'OURS')
+    ours_dir = os.path.join(baseline_root_dir, 'FT')
     video_list, src_dict, drv_dict = construct_video_list(ours_dir)
     video_dict = construct_video_dict(video_list)
     print(f'video_list_sample: {video_list[:5]}')

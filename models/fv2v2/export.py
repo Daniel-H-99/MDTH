@@ -340,7 +340,7 @@ def filter_mesh(meshes, source_mesh, SCALE):
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     # R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 4), maximum=(-math.pi / 12), center_align=True)
+    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(0), center_align=True)
     R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
     R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
     # R_xs_adapted = torch.zeros_like(R_xs_adapted)

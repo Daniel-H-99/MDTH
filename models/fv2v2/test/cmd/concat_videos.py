@@ -4,10 +4,10 @@ import numpy as np
 from tqdm import tqdm
 
 root_dir = 'demos'
-baseline_root_dir = os.path.join(root_dir,'baseline_k-actors')
-# baselines = ['MMRA','TPSMM', 'LIA', 'OURS', 'OURS_NOLOG']
-baselines = ['FT', '3.2.1', 'OURS_NOLOG']
-output_root_dir = os.path.join(root_dir, 'output_k-actors_ours')
+baseline_root_dir = os.path.join(root_dir,'baseline')
+baselines = ['MRAA','TPSMM', 'LIA', 'FT']
+# baselines = ['FT', '3.2.1', 'OURS_NOLOG']
+output_root_dir = os.path.join(root_dir, 'output_vox')
 output_video_dir = os.path.join(output_root_dir, 'video')
 label_file_path = os.path.join(output_root_dir, 'labels.txt')
 list_file_path = os.path.join(output_root_dir, 'videos.txt')
@@ -64,7 +64,7 @@ def construct_video_dict(vid_list):
     return res
 
 def get_src_drv_path(src_dir, drv_dir):
-    if 'frames' in src_dir:
+    if "b'frames'" in list(map(lambda x: str(x), os.listdir(src_dir))):
         src_frame_path = os.path.join(src_dir, 'frames', '0000000.png')
     else:
         src_frame_path = os.path.join(src_dir, 'image.png')

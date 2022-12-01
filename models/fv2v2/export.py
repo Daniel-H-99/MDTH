@@ -244,6 +244,7 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
     # values: tensor of size L
     if scale is None:
         scale = 1
+        
     sample_min, sample_max, sample_mean = values.min(), values.max(), values.mean()
     
     if not center_align:
@@ -257,7 +258,7 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
             maximum = min(maximum, origin + rel_maximum)
         else:
             maximum = origin + rel_maximum
-        
+
     if rel_minimum is not None:
         if minimum is not None:
             minimum = max(minimum, origin + rel_minimum)
@@ -266,28 +267,64 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
 
     if (minimum is not None) and (maximum is not None):
         scale = min(scale, (maximum - minimum) / (sample_max - sample_min).clamp(min=1e-6))
-
+        scaled = True
+    else:
+        scaled = False
+        
     inter_values = origin + scale * (values - sample_mean)
+
     inter_min, inter_max = inter_values.min(), inter_values.max()
     adapted_values = inter_values
-    
+
     if minimum is not None:
         print(f'minimum: {minimum}')
         print(f'inter min: {inter_min}')
         clip = max(minimum, inter_min)
         delta = clip - inter_min
         adapted_values = adapted_values + delta
-       
+        inter_min, inter_max = adapted_values.min(), adapted_values.max()
+
+    if scaled:
+        if minimum is not None:
+            assert inter_min >= minimum, f'inter: {inter_min} / min: {minimum}'
+            
     if maximum is not None: 
-        clip = min(maximum, inter_min)
-        delta = clip - inter_min
+        clip = min(maximum, inter_max)
+        delta = clip - inter_max
         adapted_values = adapted_values + delta
+        inter_min, inter_max = adapted_values.min(), adapted_values.max()
     
+    # if scaled:
+    #     if minimum is not None:
+    #         assert inter_min >= minimum, f'inter: {inter_min} / min: {minimum}'
+        
+    #     if maximum is not None:
+    #         assert inter_max <= maximum, f'inter: {inter_max} / max: {maximum}'
+        
+    # if minimum is not None and origin < minimum:
+    #     origin = minimum
+    # if maximum is not None and origin >= maximum:
+    #     origin = maximum
+    
+    # inter_values = origin + values - sample_mean
+    
+    # if minimum is not None:
+    #     lower_mask = inter_values < origin
+    #     lower_scale = min(scale, (origin - minimum) / (sample_mean - sample_min))
+    #     inter_values[lower_mask] = origin + lower_scale * (inter_values - origin)[lower_mask]
+
+    # if maximum is not None:
+    #     upper_mask = inter_values >= origin
+    #     upper_scale = min(scale, (maximum - origin) / (sample_max - sample_mean))
+    #     inter_values[upper_mask] = origin + upper_scale * (inter_values - origin)[upper_mask]
+
+    # adapted_values = inter_values
+
     return adapted_values
 
-def filter_values(values):
-    MIN_CUTOFF = 1.0
-    BETA = 1.0
+def filter_values(values, th=1.0):
+    MIN_CUTOFF = th
+    BETA = th
     num_frames = len(values)
     fps = 30
     times = np.linspace(0, num_frames / fps, num_frames)
@@ -340,7 +377,8 @@ def filter_mesh(meshes, source_mesh, SCALE):
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     # R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(0), center_align=True)
+    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 15), maximum=(math.pi / 12), center_align=True)
+    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 12), center_align=False)
     R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
     R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
     # R_xs_adapted = torch.zeros_like(R_xs_adapted)
@@ -370,8 +408,9 @@ def filter_mesh(meshes, source_mesh, SCALE):
     tmp = source_mesh['viewport'] @ source_mesh['proj']
     tmp = tmp[:3, :3]
     tmp = tmp @ new_Rs
-    bias = source_mesh['s'] * tmp @ source_mesh['b']
-    final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (bias + ts[:, :, np.newaxis] + 1)], axis=2).transpose(0, 2, 1)).float()
+    bias = -source_mesh['s'] * tmp @ source_mesh['b'] / SCALE
+    
+    final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (bias + ts[:, :, np.newaxis] + np.array([1, 1, 0])[np.newaxis, :, np.newaxis])], axis=2).transpose(0, 2, 1)).float()
     t_xs = final_Us[:, 3, 0]
     t_ys = final_Us[:, 3, 1]
     t_zs = final_Us[:, 3, 2]
@@ -884,10 +923,16 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     
     ### calc bias ###
     s = np.linalg.norm((source_mesh['raw_value'][45] - source_mesh['raw_value'][36]) / SCALE) / np.linalg.norm(source_mesh['value'][45] - source_mesh['value'][36])
+    s = 1
     source_mesh['s'] = s
-    tmp = ((1 / s) * (source_mesh['U'][3, :3] / SCALE - source_mesh['he_t'] - np.array([1, 1, 0]))[:, np.newaxis])
-    b = np.linalg.inv(source_mesh['U'][:3, :3].T) @ tmp
-    source_mesh['b'] = b
+
+    tmp = np.pad(SCALE * (source_mesh['he_t'] + np.array([1, 1, 0])), (0, 1), constant_values=1)[:, np.newaxis]
+    
+    b = np.linalg.inv(source_mesh['U'].T) @ tmp
+
+    # tmp = ((1 / s) * (source_mesh['U'][3, :3] / SCALE - source_mesh['he_t'] - np.array([1, 1, 0]))[:, np.newaxis])
+    # b = SCALE * np.linalg.inv(source_mesh['U'][:3, :3].T) @ tmp
+    source_mesh['b'] = b[:3]
 
     raw_mesh = source_mesh['raw_value']
     # source_mesh['mesh_img_sec'] = get_mesh_image_section(raw_mesh, frame_shape, section_indices, sections_indices_splitted)

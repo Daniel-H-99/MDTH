@@ -244,6 +244,7 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
     # values: tensor of size L
     if scale is None:
         scale = 1
+        
     sample_min, sample_max, sample_mean = values.min(), values.max(), values.mean()
     
     if not center_align:
@@ -257,7 +258,7 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
             maximum = min(maximum, origin + rel_maximum)
         else:
             maximum = origin + rel_maximum
-        
+
     if rel_minimum is not None:
         if minimum is not None:
             minimum = max(minimum, origin + rel_minimum)
@@ -266,23 +267,59 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
 
     if (minimum is not None) and (maximum is not None):
         scale = min(scale, (maximum - minimum) / (sample_max - sample_min).clamp(min=1e-6))
-
+        scaled = True
+    else:
+        scaled = False
+        
     inter_values = origin + scale * (values - sample_mean)
+
     inter_min, inter_max = inter_values.min(), inter_values.max()
     adapted_values = inter_values
-    
+
     if minimum is not None:
         print(f'minimum: {minimum}')
         print(f'inter min: {inter_min}')
         clip = max(minimum, inter_min)
         delta = clip - inter_min
         adapted_values = adapted_values + delta
-       
+        inter_min, inter_max = adapted_values.min(), adapted_values.max()
+
+    if scaled:
+        if minimum is not None:
+            assert inter_min >= minimum, f'inter: {inter_min} / min: {minimum}'
+            
     if maximum is not None: 
-        clip = min(maximum, inter_min)
-        delta = clip - inter_min
+        clip = min(maximum, inter_max)
+        delta = clip - inter_max
         adapted_values = adapted_values + delta
+        inter_min, inter_max = adapted_values.min(), adapted_values.max()
     
+    # if scaled:
+    #     if minimum is not None:
+    #         assert inter_min >= minimum, f'inter: {inter_min} / min: {minimum}'
+        
+    #     if maximum is not None:
+    #         assert inter_max <= maximum, f'inter: {inter_max} / max: {maximum}'
+        
+    # if minimum is not None and origin < minimum:
+    #     origin = minimum
+    # if maximum is not None and origin >= maximum:
+    #     origin = maximum
+    
+    # inter_values = origin + values - sample_mean
+    
+    # if minimum is not None:
+    #     lower_mask = inter_values < origin
+    #     lower_scale = min(scale, (origin - minimum) / (sample_mean - sample_min))
+    #     inter_values[lower_mask] = origin + lower_scale * (inter_values - origin)[lower_mask]
+
+    # if maximum is not None:
+    #     upper_mask = inter_values >= origin
+    #     upper_scale = min(scale, (maximum - origin) / (sample_max - sample_mean))
+    #     inter_values[upper_mask] = origin + upper_scale * (inter_values - origin)[upper_mask]
+
+    # adapted_values = inter_values
+
     return adapted_values
 
 def filter_values(values):

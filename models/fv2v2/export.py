@@ -888,6 +888,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     if len(source_image.shape) == 2:
         source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)
 
+    src_max = source_image.mean(axis=2).max()
+
     source_image = resize(img_as_float32(source_image), frame_shape[:2])[..., :3]
 
     source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))
@@ -1191,7 +1193,8 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     
     # mesh styling
     meshed_frames = []
-    predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min()) * 255
+    src_max = 255
+    predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min()) * src_max
     predictions = np.clip(predictions, 0, 255).astype(np.uint8)
     for i, frame in enumerate(predictions):
         # frame = ((frame - frame.min()) / (frame.max() - frame.min()) * 255)

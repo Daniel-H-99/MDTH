@@ -64,6 +64,7 @@ class THPipeline():
             export.extract_landmark_from_img(dest_path, self.he_estimator, self.landmark_model, rewrite=rewrite)
             
     def preprocess_video(self, video_name, rewrite=False, preprocess=True, extract_landmarks=True):
+        preprocess = False
         src_dir = self.config.config.preprocess.input.dir
         dest_dir = self.config.config.preprocess.output.dir
         src_path = os.path.join(src_dir, video_name)

@@ -4,10 +4,10 @@ import numpy as np
 from tqdm import tqdm
 
 root_dir = 'demos'
-baseline_root_dir = os.path.join(root_dir,'baseline_k-actors')
+baseline_root_dir = os.path.join(root_dir,'baseline_actors')
 baselines = ['MRAA','TPSMM', 'LIA', 'FT']
 # baselines = ['FT', '3.2.1', 'OURS_NOLOG']
-output_root_dir = os.path.join(root_dir, 'output_k-actors')
+output_root_dir = os.path.join(root_dir, 'output_actors')
 output_video_dir = os.path.join(output_root_dir, 'video')
 label_file_path = os.path.join(output_root_dir, 'labels.txt')
 list_file_path = os.path.join(output_root_dir, 'videos.txt')

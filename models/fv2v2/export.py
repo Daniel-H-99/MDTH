@@ -377,7 +377,7 @@ def filter_mesh(meshes, source_mesh, SCALE):
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     # R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 15), maximum=(math.pi / 12), center_align=True)
+    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 12), maximum=(math.pi / 12), center_align=True)
     # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 12), center_align=False)
     R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
     R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=True)
@@ -405,23 +405,23 @@ def filter_mesh(meshes, source_mesh, SCALE):
     ts = np.stack(ts, axis=0)
     # ts = np.zeros_like(ts)
 
-    tmp = source_mesh['viewport'] @ source_mesh['proj']
-    tmp = tmp[:3, :3]
-    tmp = tmp @ new_Rs
-    bias = -source_mesh['s'] * tmp @ source_mesh['b'] / SCALE
+    # tmp = source_mesh['viewport'] @ source_mesh['proj']
+    # tmp = tmp[:3, :3]
+    # tmp = tmp @ new_Rs
+    # bias = -source_mesh['s'] * tmp @ source_mesh['b'] / SCALE
     
-    final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (bias + ts[:, :, np.newaxis] + np.array([1, 1, 0])[np.newaxis, :, np.newaxis])], axis=2).transpose(0, 2, 1)).float()
-    t_xs = final_Us[:, 3, 0]
-    t_ys = final_Us[:, 3, 1]
-    t_zs = final_Us[:, 3, 2]
-    print(f'final_Us: {final_Us[:, 3]}')
+    # final_Us = torch.tensor(np.concatenate([source_mesh['s'] * SCALE * new_Rs, SCALE * (bias + ts[:, :, np.newaxis] + np.array([1, 1, 0])[np.newaxis, :, np.newaxis])], axis=2).transpose(0, 2, 1)).float()
+    # t_xs = final_Us[:, 3, 0]
+    # t_ys = final_Us[:, 3, 1]
+    # t_zs = final_Us[:, 3, 2]
+    # print(f'final_Us: {final_Us[:, 3]}')
 
 
     t_x_source, t_y_source, t_z_source = source_mesh['t']
     # t_x_source, t_y_source, t_z_source = source_mesh['t']
-    # t_xs = torch.tensor(np.stack(t_xs)).float()
-    # t_ys = torch.tensor(np.stack(t_ys)).float()
-    # t_zs = torch.tensor(np.stack(t_zs)).float()
+    t_xs = torch.tensor(np.stack(t_xs)).float()
+    t_ys = torch.tensor(np.stack(t_ys)).float()
+    t_zs = torch.tensor(np.stack(t_zs)).float()
 
     t_xs_adapted = adapt_values(t_x_source, t_xs, minimum=32, maximum=224, center_align=True)
     t_ys_adapted = adapt_values(t_y_source, t_ys, minimum=32, maximum=224, center_align=True)
@@ -918,7 +918,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     source_mesh['scale'] = SCALE
     source_mesh['he_R'] = source_landmarks['he_p']['R']
     source_mesh['he_t'] = source_landmarks['he_p']['t']
-    # source_mesh['he_t'][2] = -source_mesh['he_t'][2]
+    source_mesh['he_t'][2] = -source_mesh['he_t'][2]
     source_mesh['mp_value'] = mp_mesh['value'] * 2 / L + A 
     source_mesh['MP_ROI_IDX'] = torch.tensor(LEFT_EYEBROW_IDX + LEFT_EYE_IDX + LEFT_IRIS_IDX + RIGHT_EYEBROW_IDX + RIGHT_EYE_IDX + RIGHT_IRIS_IDX).long()
     source_mesh['OPENFACE_ROI_IDX'] = torch.tensor(OPENFACE_OVAL_IDX + OPENFACE_NOSE_IDX + OPENFACE_LIP_IDX).long()
@@ -1123,10 +1123,10 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
 
             # use driving trans
             final_trans = driving_pose['t'][:3]
-            # final_trans[2] = -final_trans[2]
+            final_trans[2] = -final_trans[2]
             print(f'driving t; {final_trans}')
             # print(f'final_trans: {final_trans}')
-            # final_trans = driving_landmarks[driven_pose_index]['p']['U'].copy()[3, :3]
+            final_trans = driving_landmarks[driven_pose_index]['p']['U'].copy()[3, :3]
             # print(f'pose_idx: {driven_pose_index}')
             # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
             mesh['t'] = final_trans

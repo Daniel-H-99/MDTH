@@ -849,6 +849,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     if len(source_image.shape) == 2:
         source_image = cv2.cvtColor(source_image, cv2.COLOR_GRAY2RGB)
 
+
     source_image = resize(img_as_float32(source_image), frame_shape[:2])[..., :3]
 
     source_landmarks = torch.load(os.path.join(opt.source_dir, '3d_landmarks.pt'))

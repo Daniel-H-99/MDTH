@@ -401,14 +401,16 @@ class HEEstimator(nn.Module):
         t = self.fc_t(out)
         exp = self.fc_exp(out)
 
-        _yaw = headpose_pred_to_degree(yaw)
-        _pitch = headpose_pred_to_degree(pitch)
-        _roll = headpose_pred_to_degree(roll)
-
+        _yaw = -headpose_pred_to_degree(yaw)
+        _pitch = -headpose_pred_to_degree(pitch)
+        _roll = -headpose_pred_to_degree(roll)
 
         R = get_rotation_matrix(_yaw, _pitch, _roll)
+
+        t = 128 * (F.tanh(t) + torch.tensor([1, 1, 0]).unsqueeze(0).to(out.device))
+
         
         # t = torch.cat([t[:, [0]], -t[:, [1]], t[:, [2]]], dim=1)
         # t = t[:, [1, 0, 2]]
         
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp, 'R': R, 'out': out}
+        return {'yaw': _yaw, 'pitch': _pitch, 'roll': _roll, 't': t, 'exp': exp, 'R': R, 'out': out}

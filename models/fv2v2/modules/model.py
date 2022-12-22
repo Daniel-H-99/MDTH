@@ -9,6 +9,7 @@ from torch.autograd import grad
 import modules.hopenet as hopenet
 from torchvision import transforms
 from facenet_pytorch import InceptionResnetV1
+from utils.util import matrix2euler
 
 class Vgg19(torch.nn.Module):
     """
@@ -136,38 +137,38 @@ def headpose_pred_to_degree(pred):
 
     return degree
 
-'''
-# beta version
-def get_rotation_matrix(yaw, pitch, roll):
-    yaw = yaw / 180 * 3.14
-    pitch = pitch / 180 * 3.14
-    roll = roll / 180 * 3.14
 
-    roll = roll.unsqueeze(1)
-    pitch = pitch.unsqueeze(1)
-    yaw = yaw.unsqueeze(1)
+# # beta version
+# def get_rotation_matrix(yaw, pitch, roll):
+#     yaw = yaw / 180 * 3.14
+#     pitch = pitch / 180 * 3.14
+#     roll = roll / 180 * 3.14
 
-    roll_mat = torch.cat([torch.ones_like(roll), torch.zeros_like(roll), torch.zeros_like(roll), 
-                          torch.zeros_like(roll), torch.cos(roll), -torch.sin(roll),
-                          torch.zeros_like(roll), torch.sin(roll), torch.cos(roll)], dim=1)
-    roll_mat = roll_mat.view(roll_mat.shape[0], 3, 3)
+#     roll = roll.unsqueeze(1)
+#     pitch = pitch.unsqueeze(1)
+#     yaw = yaw.unsqueeze(1)
 
-    pitch_mat = torch.cat([torch.cos(pitch), torch.zeros_like(pitch), torch.sin(pitch), 
-                           torch.zeros_like(pitch), torch.ones_like(pitch), torch.zeros_like(pitch),
-                           -torch.sin(pitch), torch.zeros_like(pitch), torch.cos(pitch)], dim=1)
-    pitch_mat = pitch_mat.view(pitch_mat.shape[0], 3, 3)
+#     roll_mat = torch.cat([torch.ones_like(roll), torch.zeros_like(roll), torch.zeros_like(roll), 
+#                           torch.zeros_like(roll), torch.cos(roll), -torch.sin(roll),
+#                           torch.zeros_like(roll), torch.sin(roll), torch.cos(roll)], dim=1)
+#     roll_mat = roll_mat.view(roll_mat.shape[0], 3, 3)
 
-    yaw_mat = torch.cat([torch.cos(yaw), -torch.sin(yaw), torch.zeros_like(yaw),  
-                         torch.sin(yaw), torch.cos(yaw), torch.zeros_like(yaw),
-                         torch.zeros_like(yaw), torch.zeros_like(yaw), torch.ones_like(yaw)], dim=1)
-    yaw_mat = yaw_mat.view(yaw_mat.shape[0], 3, 3)
+#     pitch_mat = torch.cat([torch.cos(pitch), torch.zeros_like(pitch), torch.sin(pitch), 
+#                            torch.zeros_like(pitch), torch.ones_like(pitch), torch.zeros_like(pitch),
+#                            -torch.sin(pitch), torch.zeros_like(pitch), torch.cos(pitch)], dim=1)
+#     pitch_mat = pitch_mat.view(pitch_mat.shape[0], 3, 3)
 
-    rot_mat = torch.einsum('bij,bjk,bkm->bim', roll_mat, pitch_mat, yaw_mat)
+#     yaw_mat = torch.cat([torch.cos(yaw), -torch.sin(yaw), torch.zeros_like(yaw),  
+#                          torch.sin(yaw), torch.cos(yaw), torch.zeros_like(yaw),
+#                          torch.zeros_like(yaw), torch.zeros_like(yaw), torch.ones_like(yaw)], dim=1)
+#     yaw_mat = yaw_mat.view(yaw_mat.shape[0], 3, 3)
 
-    return rot_mat
-'''
+#     rot_mat = torch.einsum('bij,bjk,bkm->bim', roll_mat, pitch_mat, yaw_mat)
 
-def keypoint_transformation(kp_canonical, mesh):
+#     return rot_mat
+
+
+def keypoint_transformation(kp_canonical, mesh, he_R=None, he_t=None):
     device = kp_canonical['value'].device
     
     if 'delta' in mesh:
@@ -176,7 +177,20 @@ def keypoint_transformation(kp_canonical, mesh):
         kp_normed = kp_canonical['value']
         
     tmp = torch.cat([kp_normed, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
-    tmp = tmp.matmul(mesh['U']) # B x N x 4
+    
+    ### estimate U
+    view = torch.tensor(mesh['view'])
+    proj = torch.tensor(mesh['proj'])
+    viewport = torch.tensor(mesh['viewport'])
+    
+    # if he_R is not None:
+    #     view[:, :3, :3] = he_R
+    if he_t is not None:
+        view[:, :3, 3] = he_t
+    
+    U =  view.transpose(1, 2).matmul(proj.transpose(1, 2)).matmul(viewport.transpose(1, 2))
+    
+    tmp = tmp.matmul(U) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
     tmp[:, :, 2] = tmp[:, :, 2] / 5
     kp_transformed = tmp # B x N x 3
@@ -185,7 +199,7 @@ def keypoint_transformation(kp_canonical, mesh):
     tmp = kp_canonical['value']
 
     tmp = torch.cat([tmp, torch.ones(kp_normed.shape[0], kp_normed.shape[1], 1).to(device) / mesh['scale'].unsqueeze(1).unsqueeze(2)], dim=2) # B x N x 4
-    tmp = tmp.matmul(mesh['U']) # B x N x 4
+    tmp = tmp.matmul(U) # B x N x 4
     tmp = tmp[:, :, :3] + torch.tensor([-1, -1, 0]).unsqueeze(0).unsqueeze(1).to(device)
     tmp[:, :, 2] = tmp[:, :, 2] / 5
 
@@ -1285,7 +1299,23 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
             generator.eval()
             for p in generator.parameters():
                 p.requires_grad = False
-            
+
+        if self.stage == 4:
+            for name, p in self.exp_transformer.named_parameters():
+                p.requires_grad = False
+            self.exp_transformer.train()
+
+            generator.eval()
+            for p in generator.parameters():
+                p.requires_grad = False
+                
+            for name, p in he_estimator.named_parameters():
+                if  'yaw' in name or 'pitch' in name or 'roll' in name or 'fc_t' in name:
+                    print(f'he estimator: {name} added')
+                    p.requires_grad = True
+                else:
+                    p.requires_grad = False
+                
         #     self.id_classifier_scale = train_params['id_classifier_scale']
         #     self.id_classifier_scaler = AntiAliasInterpolation2d(3, self.id_classifier_scale).to(device_ids[0])
         #     self.id_classifier = InceptionResnetV1(pretrained='vggface2').eval().to(device_ids[0])
@@ -1503,6 +1533,8 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
+
+
 
             if self.loss_weights['headpose'] != 0:
                 transform_hopenet =  transforms.Compose([
@@ -1793,6 +1825,324 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 # print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
                 value_total += value_depth
                 loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
+                
+            if self.loss_weights['headpose'] != 0:
+                transform_hopenet =  transforms.Compose([
+                                                        transforms.Resize(size=(224, 224)),
+                                                        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                                                        transforms.ToTensor()])
+                
+                # print(f'driving image shape: {x["driving"][0].cpu().size()}')
+                # print(f'driving image shape: {transforms.ToPILImage()(x["driving"][0].permute(1, 2, 0).cpu()).size}')
+                # print(f'driving image: {transforms.ToPILImage()(x["driving"][0].permute(1, 2, 0).cpu())}')
+                driving_224 = transform_hopenet(x['driving'].cpu()).cuda()
+                driving_224 = x['hopenet_driving']
+
+                yaw_gt, pitch_gt, roll_gt = self.hopenet(driving_224)
+                yaw_gt = headpose_pred_to_degree(yaw_gt)
+                pitch_gt = headpose_pred_to_degree(pitch_gt)
+                roll_gt = headpose_pred_to_degree(roll_gt)
+
+                yaw, pitch, roll = he_driving['yaw'], he_driving['pitch'], he_driving['roll']
+                yaw = headpose_pred_to_degree(yaw)
+                pitch = headpose_pred_to_degree(pitch)
+                roll = headpose_pred_to_degree(roll)
+
+                value = torch.abs(yaw - yaw_gt).mean() + torch.abs(pitch - pitch_gt).mean() + torch.abs(roll - roll_gt).mean()
+                loss_values['headpose'] = self.loss_weights['headpose'] * value
+
+            if self.loss_weights['expression'] != 0:
+                value = torch.norm(driving_mesh['exp'], p=1, dim=-1).mean()
+                loss_values['expression'] = self.loss_weights['expression'] * value
+    
+        elif self.stage == 4:
+            loss_values = {}
+            
+            bs = len(x['source'])
+            
+            # kp_canonical = self.kp_extractor(x['source'])     # {'value': value, 'jacobian': jacobian}   
+
+            source_mesh = x['source_mesh']  # B x L x N x 3 (repeated for L times)
+            driving_mesh = x['driving_mesh'] # B x L x N x 3
+            
+            # driving_mesh['scale'] = source_mesh['scale']
+            # driving_mesh['U'] = np.source_mesh['U']
+            
+            he_driving = self.he_estimator(x['driving'])
+            # yaw, pitch, roll = he_driving['yaw'], he_driving['pitch'], he_driving['roll']
+            # yaw = headpose_pred_to_degree(yaw)
+            # pitch = headpose_pred_to_degree(pitch)
+            # roll = headpose_pred_to_degree(roll)
+            he_R = he_driving['R']
+            he_t = he_driving['t']
+            
+            tf_output = self.exp_transformer({'mesh': source_mesh}, {'mesh': driving_mesh})
+
+            kp_canonical = {'value': tf_output['src_kp']}
+            kp_canonical_drv = {'value': tf_output['drv_kp']}
+
+            delta_src_embedding = {'delta_style_code': tf_output['src_embedding']['delta_style_code'], 'delta_exp_code': tf_output['src_embedding']['delta_exp_code']}
+            delta_drv_embedding = {'delta_style_code': tf_output['src_embedding']['delta_style_code'], 'delta_exp_code': tf_output['drv_embedding']['delta_exp_code']}
+            # {'value': value, 'jacobian': jacobian}
+            
+            src_delta = self.exp_transformer.decode(delta_src_embedding)['delta']
+            drv_delta = self.exp_transformer.decode(delta_drv_embedding)['delta']
+            
+            driving_mesh['delta'] = -src_delta + drv_delta
+            
+            kp_source = keypoint_transformation(kp_canonical, source_mesh)
+            kp_driving = keypoint_transformation(kp_canonical, driving_mesh, he_R=he_R, he_t=he_t)
+
+            # kp_source['_mesh_img_sec'] = x['source_mesh']['_mesh_img_sec']
+            # kp_source['mesh_img_sec'] = x['source_mesh']['mesh_img_sec']
+            # kp_driving['_mesh_img_sec'] = x['driving_mesh']['_mesh_img_sec']
+            # kp_driving['mesh_img_sec'] = x['driving_mesh']['mesh_img_sec']
+            # self.denormalize(kp_source, x['source'])        # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
+            # self.denormalize(kp_driving, x['driving'])      # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 's_e': s_e}
+
+            
+            # driving_224 = x['hopenet_driving']
+            # yaw_gt, pitch_gt, roll_gt = self.hopenet(driving_224)
+
+            # reg = self.regularize(kp_canonical_source, kp_canonical_driving) # regularizor loss
+
+
+            
+            # x_reg = kp_canonical['value'].flatten(1)
+            # for x_i in x_reg:
+            #     self.pca_x.register(x_i.detach().cpu())
+            # if self.pca_x.steps > 2:
+            #     mu_x, u_x, s_x = self.pca_x.get_state(device='cuda')
+            #     loss_reg = ((x_reg - mu_x[None]).unsqueeze(1) @ ((u_x @ (s_x ** 2) @ u_x.t())[None] + self.sigma_err[None]).inverse() @ (x_reg - mu_x[None]).unsqueeze(2)).mean() # 1
+            #     loss['regularizor'] = self.loss_weights['regularizor'] * loss_reg
+            #     self.mu_x, self.u_x, self.s_x = self.pca_x.get_state()
+            # else:
+            #     loss['regularizor'] = self.loss_weights['regularizor'] * torch.zeros(1).cuda().mean()
+
+            # if self.pca_x.steps * self.pca_e.steps > 0:
+            #     kp_source, kp_driving = reg['kp_source'], reg['kp_driving']
+            #     loss = {k: self.loss_weights[k] * v for k, v in reg['loss'].items()}
+            # else:
+            #     kp_source, kp_driving = kp_canonical_source, kp_canonical_driving
+            #     loss = {k: self.loss_weights[k] * torch.zeros(1).cuda() for k, v in reg['loss'].items()}
+
+
+            # {'value': value, 'jacobian': jacobian}
+            # kp_source = keypoint_transformation(kp_canonical, he_source, self.estimate_jacobian)
+            # kp_driving = keypoint_transformation(kp_canonical, he_driving, self.estimate_jacobian)
+
+            
+            # print('entering generator')
+            # print(f'kp_source value: {kp_source["value"]}')
+            # print(f'kp_driving value: {kp_driving["value"]}')
+            
+            generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
+            generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+            pyramide_real = self.pyramid(x['driving'])
+            pyramide_generated = self.pyramid(generated['prediction'])
+            
+            generated['source_kp_canonical'] = {'value': kp_source['canonical']}
+            generated['driving_kp_canonical'] = {'value': kp_driving['canonical']}
+            # generated['source_mesh_image'] = kp_source['mesh_img_sec']
+            # generated['driving_mesh_image'] = kp_driving['mesh_img_sec']
+            
+            if cycled_drive:
+                ## cycled expression drive
+                delta_style_code = tf_output['src_embedding']['delta_style_code']
+                delta_exp_code = tf_output['src_embedding']['delta_exp_code']
+                delta_exp_code_cycled = torch.cat([delta_exp_code[1:], delta_exp_code[[0]]], dim=0)
+                src_delta_cycled = self.exp_transformer.decode({'delta_style_code': delta_style_code, 'delta_exp_code': delta_exp_code_cycled})['delta']
+                source_mesh_cycled = {'U': source_mesh['U'], 'scale': source_mesh['scale'], 'delta': - src_delta + src_delta_cycled, 'view': source_mesh['view'], 'proj': source_mesh['proj'], 'viewport': source_mesh['viewport']}
+
+                kp_source_cycled = keypoint_transformation(kp_canonical, source_mesh_cycled)
+
+                generated_cycled = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_source_cycled)
+                for k, v in list(generated_cycled.items()):
+                    generated[f'{k}_cycled'] = v
+                generated['kp_source_cycled'] = kp_source_cycled
+                
+
+            if self.loss_weights['log'] != 0:
+                src_exp_code = tf_output['src_embedding']['delta_exp_code']   # B x num_heads
+                drv_exp_code = tf_output['drv_embedding']['delta_exp_code']   # B x num_heads
+                greater_mask = (src_exp_code >= drv_exp_code).detach() 
+                less_mask = ~greater_mask
+                greater_labels = torch.cat([src_exp_code[greater_mask], drv_exp_code[less_mask]], dim=0)
+                less_labels = torch.cat([src_exp_code[less_mask], drv_exp_code[greater_mask]], dim=0)
+                loss_values['log'] = self.loss_weights['log'] * (self.log_loss(greater_labels) + self.log_loss(-less_labels))
+
+            if self.loss_weights['style'] != 0:
+                src_style_code = tf_output['src_embedding']['delta_style_code']   # B x num_heads
+                drv_style_code = tf_output['drv_embedding']['delta_style_code']   # B x num_heads
+                loss_values['style'] = self.loss_weights['style'] * torch.norm(src_style_code - drv_style_code, dim=1) ** 2
+            
+            
+            if self.loss_weights['l1'] != 0:
+                loss_values['l1'] = self.loss_weights['l1'] * F.l1_loss(generated['prediction'], x['driving'])
+
+            if self.loss_weights['motion_match'] != 0:
+                motion = generated['deformation'] # B x d x h x w x 3
+                motion = motion.permute(0, 4, 1, 2, 3) # B x 3 x d x h x w
+                it_section = driving_mesh['raw_value'] # B x N x 3
+                motion_GT = source_mesh['raw_value'] # B x N x 3
+                it_section_eye = it_section[:, source_mesh['OPENFACE_EYE_IDX'][0].long()]
+                motion_GT_eye = motion_GT[:, source_mesh['OPENFACE_EYE_IDX'][0].long()]
+                it_section_mouth = it_section[:, source_mesh['OPENFACE_LIP_IDX'][0].long()]
+                motion_GT_mouth = motion_GT[:, source_mesh['OPENFACE_LIP_IDX'][0].long()]
+                # print(f'it section shape: {it_section.shape}')
+                # print(f'motion_GT section shape: {motion_GT.shape}')
+                # print(f'motion shape: {motion.shape}')
+                motion_section = F.grid_sample(motion, it_section[:, :, None, None])
+                motion_section = motion_section.squeeze(4).squeeze(3).transpose(1,2) # B x N x 3
+
+                motion_section_eye = F.grid_sample(motion, it_section_eye[:, :, None, None])
+                motion_section_eye = motion_section_eye.squeeze(4).squeeze(3).transpose(1,2) # B x N x 3
+
+                motion_section_mouth = F.grid_sample(motion, it_section_mouth[:, :, None, None])
+                motion_section_mouth = motion_section_mouth.squeeze(4).squeeze(3).transpose(1,2) # B x N x 3
+
+                # print(f'motion Gt size {motion_GT.shape}')
+                # print(f'motion size {motion_section.shape}')
+                # print(f'motion_section: {motion_section}')
+                # print(f'motion_section_GT : {motion_GT}')
+                
+                loss_values['motion_match'] = 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section, motion_GT) \
+                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_eye, motion_GT_eye) \
+                                                + 1 * self.loss_weights['motion_match'] * F.l1_loss(motion_section_mouth, motion_GT_mouth)
+
+            if np.array(self.loss_weights['localized']).sum() != 0:
+                localized_loss = 0
+                split = []
+                centre = []
+                ws = []
+
+                for sec, w in zip(self.sections, self.loss_weights['localized']):
+                    center = kp_source['value'][:, sec[0]].mean(dim=1)
+                    centre.append(center)
+                    split.append(sec[1])
+                    ws.append(w)
+
+                split = kp_source['prior'].split(split, dim=1) # [num_sec] x B x len_sec x 3
+
+                for sec, center, w in zip(split, centre, ws):
+                    localized_loss = localized_loss + w * (sec - center.unsqueeze(1)).norm() / (sec.size(0) * sec.size(1))
+                
+                loss_values['localized'] = localized_loss
+
+            if sum(self.loss_weights['perceptual']) != 0:
+                value_total = 0
+                for scale in self.scales:
+                    x_vgg = self.vgg(pyramide_generated['prediction_' + str(scale)])
+                    y_vgg = self.vgg(pyramide_real['prediction_' + str(scale)])
+
+                    for i, weight in enumerate(self.loss_weights['perceptual']):
+                        value = torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
+                        value_total += self.loss_weights['perceptual'][i] * value
+                loss_values['perceptual'] = value_total
+
+            if self.loss_weights['generator_gan'] != 0:
+                discriminator_maps_generated = self.discriminator(pyramide_generated)
+                discriminator_maps_real = self.discriminator(pyramide_real)
+                
+                value_total = 0
+                for scale in self.disc_scales:
+                    key = 'prediction_map_%s' % scale
+                    if self.train_params['gan_mode'] == 'hinge':
+                        value = -torch.mean(discriminator_maps_generated[key])
+                    elif self.train_params['gan_mode'] == 'ls':
+                        value = ((1 - discriminator_maps_generated[key]) ** 2).mean()
+                    else:
+                        raise ValueError('Unexpected gan_mode {}'.format(self.train_params['gan_mode']))
+
+                    value_total += self.loss_weights['generator_gan'] * value
+                loss_values['gen_gan'] = value_total
+
+                if sum(self.loss_weights['feature_matching']) != 0:
+                    value_total = 0
+                    for scale in self.disc_scales:
+                        key = 'feature_maps_%s' % scale
+                        for i, (a, b) in enumerate(zip(discriminator_maps_real[key], discriminator_maps_generated[key])):
+                            if self.loss_weights['feature_matching'][i] == 0:
+                                continue
+                            value = torch.abs(a - b).mean()
+                            value_total += self.loss_weights['feature_matching'][i] * value
+                        loss_values['feature_matching'] = value_total
+
+            if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
+                transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
+                transformed_frame = transform.transform_frame(x['driving'])
+
+                transformed_embedding = self.exp_transformer.encode(transformed_frame) 
+                exp_transformed = self.exp_transformer.decode({'style': tf_output['src_embedding']['style'], 'exp': transformed_embedding['exp']})
+
+                transformed_kp = {'value': kp_driving['prior'] - kp_driving['exp'] + exp_transformed['exp']}
+
+                generated['transformed_frame'] = transformed_frame
+                generated['transformed_kp'] = transformed_kp
+
+                ## Value loss part
+                if self.loss_weights['equivariance_value'] != 0:
+                    # project 3d -> 2d
+                    kp_driving_2d = kp_driving['prior'][:, :, :2]
+                    transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                    value = torch.abs(kp_driving_2d - transform.warp_coordinates(transformed_kp_2d)).mean()
+                    loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value
+
+                ## jacobian loss part
+                if self.loss_weights['equivariance_jacobian'] != 0:
+                    # project 3d -> 2d
+                    transformed_kp_2d = transformed_kp['value'][:, :, :2]
+                    transformed_jacobian_2d = transformed_kp['jacobian'][:, :, :2, :2]
+                    jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp_2d),
+                                                        transformed_jacobian_2d)
+                    
+                    jacobian_2d = kp_driving['jacobian'][:, :, :2, :2]
+                    normed_driving = torch.inverse(jacobian_2d)
+                    normed_transformed = jacobian_transformed
+                    value = torch.matmul(normed_driving, normed_transformed)
+
+                    eye = torch.eye(2).view(1, 1, 2, 2).type(value.type())
+
+                    value = torch.abs(eye - value).mean()
+                    loss_values['equivariance_jacobian'] = self.loss_weights['equivariance_jacobian'] * value
+
+            if self.loss_weights['keypoint'] != 0:
+                # print(kp_driving['value'].shape)     # (bs, k, 3)
+                value_total = 0
+                for i in range(kp_canonical['value'].shape[1]):
+                    for j in range(kp_canonical['value'].shape[1]):
+                        dist = F.pairwise_distance(kp_driving['value'][:, i, :], kp_driving['value'][:, j, :], p=2, keepdim=True) ** 2
+                        dist = 0.2 - dist      # set Dt = 0.1
+                        dd = torch.gt(dist, 0) 
+                        value = (dist * dd).mean()
+                        value_total += value
+
+                kp_mean_depth = kp_canonical['value'][:, :, -1].mean(-1)
+                value_depth = torch.abs(kp_mean_depth + 0.33).mean()          # set Zt = 0.33
+                # print(f'kp_mean_depth: {kp_driving["value"][:, :, -1].mean(-1)}')
+                # print(f'kp_depth: {kp_driving["value"][:, :, -1]}')
+                value_total += value_depth
+                loss_values['keypoint'] = self.loss_weights['keypoint'] * value_total
+
+            if self.loss_weights['headpose_mp'] != 0:
+                euler_gt = torch.tensor(matrix2euler(driving_mesh['view'][:, :3, :3].detach().cpu().numpy())).float().to(driving_mesh['view'].device)
+                pitch_gt, yaw_gt, roll_gt = euler_gt[:, 0], euler_gt[:, 1], euler_gt[:, 2]
+                tx_gt, ty_gt, tz_gt = driving_mesh['view'][:, :3, 3].transpose(0, 1)
+                # print(f'gt t: {tx_gt}')
+                # while True:
+                #     continue
+                yaw, pitch, roll = he_driving['yaw'], he_driving['pitch'], he_driving['roll']
+                # yaw = headpose_pred_to_degree(yaw)
+                # pitch = headpose_pred_to_degree(pitch)
+                # roll = headpose_pred_to_degree(roll)
+
+                he_t = he_driving['t']
+                tx, ty, tz = he_t[:, 0], he_t[:, 1], he_t[:, 2]
+                value = torch.abs(tx - tx_gt).mean() + torch.abs(ty - ty_gt).mean() + torch.abs(tz - tz_gt).mean()
+                # value = torch.abs(yaw - yaw_gt).mean() + torch.abs(pitch - pitch_gt).mean() + torch.abs(roll - roll_gt).mean() + torch.abs(tx - tx_gt).mean() + torch.abs(ty - ty_gt).mean() + torch.abs(tz - tz_gt).mean()
+                
+                loss_values['headpose_mp'] = self.loss_weights['headpose_mp'] * value
+
 
             if self.loss_weights['headpose'] != 0:
                 transform_hopenet =  transforms.Compose([
@@ -1816,6 +2166,7 @@ class ExpTransformerTrainer(GeneratorFullModelWithSeg):
                 pitch = headpose_pred_to_degree(pitch)
                 roll = headpose_pred_to_degree(roll)
 
+                value = torch.abs(yaw - yaw_gt).mean() + torch.abs(pitch - pitch_gt).mean() + torch.abs(roll - roll_gt).mean()
                 value = torch.abs(yaw - yaw_gt).mean() + torch.abs(pitch - pitch_gt).mean() + torch.abs(roll - roll_gt).mean()
                 loss_values['headpose'] = self.loss_weights['headpose'] * value
 

@@ -154,6 +154,7 @@ class FramesDataset3S2(Dataset):
         lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W, t_noise=0.05*H)
         # U = torch.from_numpy(U['U'])
         normalizer = U['normalizer']
+        view, proj, viewport = U['view'], U['proj'], U['viewport']
         U = U['U']
         # print(f'normed: {lm_normed_3d}')
         if noise is not None:
@@ -178,6 +179,9 @@ class FramesDataset3S2(Dataset):
         mesh["raw_value"] = lm_3d
         mesh["value"] = lm_scaled_3d.astype(np.float32)
         mesh["U"] = U.astype(np.float32)
+        mesh["view"] = view.astype(np.float32)
+        mesh["proj"] = proj.astype(np.float32)
+        mesh["viewport"] = viewport.astype(np.float32)
         mesh["scale"] = scale
         # print(f'landmark: {lm}')
         # print(f'mesh: {mesh}')
@@ -335,6 +339,7 @@ class FramesDataset3S2(Dataset):
                     mesh['OPENFACE_LIP_IDX'] = OPENFACE_LIP_IDX
                     mesh['OPENFACE_ROI_IDX'] = torch.tensor(OPENFACE_OVAL_IDX + OPENFACE_NOSE_IDX + OPENFACE_LIP_IDX).long()
                     
+                    mesh['C'] = 5 // 2
                     # print('checkpoint 2')
                     # print(f'data type: {mesh["value"].dtype}')
                     meshes.append(mesh)
@@ -450,6 +455,7 @@ class FramesDataset3(Dataset):
         lm_normed_3d, U, Ind = self.landmark_model.normalize_mesh(lm, H, W, t_noise=0.05*H)
         # U = torch.from_numpy(U['U'])
         normalizer = U['normalizer']
+        view, proj, viewport = U['view'], U['proj'], U['viewport']
         U = U['U']
         # print(f'normed: {lm_normed_3d}')
         if noise is not None:
@@ -474,6 +480,9 @@ class FramesDataset3(Dataset):
         mesh["raw_value"] = lm_3d
         mesh["value"] = lm_scaled_3d.astype(np.float32)
         mesh["U"] = U.astype(np.float32)
+        mesh["view"] = view.astype(np.float32)
+        mesh["proj"] = proj.astype(np.float32)
+        mesh["viewport"] = viewport.astype(np.float32)
         mesh["scale"] = scale
         # print(f'landmark: {lm}')
         # print(f'mesh: {mesh}')

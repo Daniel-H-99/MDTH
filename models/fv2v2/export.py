@@ -247,12 +247,6 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
         
     sample_min, sample_max, sample_mean = values.min(), values.max(), values.mean()
     
-    if not center_align:
-        origin = sample_mean
-
-    if center is not None:
-        origin = center
-
     if rel_maximum is not None:
         if maximum is not None:
             maximum = min(maximum, origin + rel_maximum)
@@ -264,6 +258,14 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
             minimum = max(minimum, origin + rel_minimum)
         else:
             minimum = origin + rel_minimum
+
+
+    if not center_align:
+        origin = sample_mean
+
+    if center is not None:
+        origin = center
+
 
     if (minimum is not None) and (maximum is not None):
         scale = min(scale, (maximum - minimum) / (sample_max - sample_min).clamp(min=1e-6))
@@ -325,7 +327,7 @@ def adapt_values(origin, values, minimum=None, maximum=None, rel_minimum=None, r
 
     return adapted_values
 
-def filter_values(values, th=1.0):
+def filter_values(values, th=1.0, scale=1):
     MIN_CUTOFF = th
     BETA = th
     num_frames = len(values)
@@ -334,7 +336,7 @@ def filter_values(values, th=1.0):
     
     filtered_values= []
     
-    values = values
+    values = values * scale
     
     for i, x in enumerate(values):
         if i == 0:
@@ -345,7 +347,7 @@ def filter_values(values, th=1.0):
         filtered_values.append(x)
         
     res = np.array(filtered_values)
-    res = res
+    res = res / scale
     return res
 
 
@@ -357,11 +359,11 @@ def filter_mesh(meshes, source_mesh, SCALE):
     t_xs = []
     t_ys = []
     t_zs = []
-    
+    scales = []
     ts = []
     Rs = []
     for i, mesh in enumerate(meshes):
-        he_R, t = mesh['R'], mesh['t']
+        he_R, t, scale = mesh['R'], mesh['t'], mesh['proj'][0, 0]
         Rs.append(he_R)
         ts.append(t)
         R_x, R_y, R_z = matrix2euler(he_R)
@@ -372,7 +374,8 @@ def filter_mesh(meshes, source_mesh, SCALE):
         t_xs.append(t_x)
         t_ys.append(t_y)
         t_zs.append(t_z)
-    
+        scales.append(scale)
+        
     R_xs = torch.tensor(R_xs).float()
     R_ys = torch.tensor(R_ys).float()
     R_zs = torch.tensor(R_zs).float()
@@ -380,23 +383,29 @@ def filter_mesh(meshes, source_mesh, SCALE):
     R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     # R_x_source, R_y_source, R_z_source = matrix2euler(source_mesh['R'])
     
-    # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 6), rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), center_align=False)
+    R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 12), center_align=False, clip=True)
     # R_xs_adapted = adapt_values(R_x_source, R_xs, minimum=(-math.pi / 6), maximum=(math.pi / 12), center_align=False)
-    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 3), rel_maximum=(math.pi / 3), minimum=(-math.pi / 3), maximum=(math.pi / 3), center_align=False, clip=True)
+    R_ys_adapted = adapt_values(R_y_source, R_ys, rel_minimum=(-math.pi / 4), rel_maximum=(math.pi / 4), minimum=(-math.pi / 3), maximum=(math.pi / 3), center_align=False, clip=True)
+    # print(f'R_y_source: {R_y_source}')
+    # print(f'R_y_source: {-math.pi / 12}')
+    # print(f'R_y_source min: {R_ys_adapted.min()}')
+    # print(f'R_y_source: {R_ys_adapted.max()}')
+    # while True:
+    #     continue
     # R_zs_adapted = adapt_values(R_z_source, R_zs, rel_minimum=(-math.pi / 6), rel_maximum=(math.pi / 6), minimum = (-math.pi / 6), maximum=(math.pi / 6), center_align=True)
     # R_xs_adapted = torch.zeros_like(R_xs_adapted)
     # R_ys_adapted = torch.zeros_like(R_ys_adapted)
     # R_zs_adapted = torch.zeros_like(R_zs_adapted)
-    R_xs_adapted = R_xs
+    # R_xs_adapted = R_xs
     # R_ys_adapted = R_ys
     R_zs_adapted = R_zs
     
-    R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy(), th=0.1)).float()
-    # R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy(), th=0.1)).float()
-    # R_zs_filtered = torch.tensor(filter_values(R_zs_adapted.numpy(), th=0.1)).float()
+    R_xs_filtered = torch.tensor(filter_values(R_xs_adapted.numpy(), scale=1)).float()
+    R_ys_filtered = torch.tensor(filter_values(R_ys_adapted.numpy(), scale=5)).float()
+    R_zs_filtered = torch.tensor(filter_values(R_zs_adapted.numpy(), scale=1)).float()
     # R_xs_filtered = R_xs_adapted
-    R_ys_filtered = R_ys_adapted
-    R_zs_filtered = R_zs_adapted
+    # R_ys_filtered = R_ys_adapted
+    # R_zs_filtered = R_zs_adapted
     
     new_Rs = []
 
@@ -408,6 +417,17 @@ def filter_mesh(meshes, source_mesh, SCALE):
     
     new_Rs = torch.stack(new_Rs, dim=0).numpy()
     ts = np.stack(ts, axis=0)
+    
+    scales = np.stack(scales, axis=0)
+    normed_scales = scales / scales.mean()
+    adapted_scales = adapt_values(1, normed_scales, minimum=0, center_align=True, clip=True)
+    normed_scales = scales
+    filtered_scales = filter_values(adapted_scales, scale=1/128)
+    projects = source_mesh['proj'][np.newaxis].repeat(len(new_Rs), 0)
+    projects[:, 0, 0] = filtered_scales
+    projects[:, 1, 1] =filtered_scales
+    
+    
     # ts = np.zeros_like(ts)
 
     # tmp = source_mesh['viewport'] @ source_mesh['proj']
@@ -424,9 +444,15 @@ def filter_mesh(meshes, source_mesh, SCALE):
     # t_xs = torch.tensor(np.stack(t_xs)).float()
     # t_ys = torch.tensor(np.stack(t_ys)).float()
     # t_zs = torch.tensor(np.stack(t_zs)).float()
-    view_t_xs = filter_values(np.stack(t_xs))
-    view_t_ys = filter_values(np.stack(t_ys))
-    view_t_zs = filter_values(np.stack(t_zs))
+    # view_t_xs = adapt_values(128, np.stack(t_xs), center_align=True)
+    # view_t_ys = adapt_values(128, np.stack(t_ys), center_align=True)
+    # view_t_zs = adapt_values(np.stack(t_zs), center=0)
+    view_t_xs = np.stack(t_xs)
+    view_t_ys = np.stack(t_ys)
+    view_t_zs = np.stack(t_zs)
+    view_t_xs = filter_values(view_t_xs, scale=1/128)
+    view_t_ys = filter_values(view_t_ys, scale=1/128)
+    view_t_zs = filter_values(view_t_zs, scale=1/128)
     t_filtered = np.stack([view_t_xs, view_t_ys, view_t_zs], axis=1)
     tmp_views = np.stack([mesh['view'] for mesh in meshes], axis=0)
     tmp_views[:, :3, :3] = new_Rs.copy()
@@ -436,7 +462,8 @@ def filter_mesh(meshes, source_mesh, SCALE):
     # print(f"else shape: {(source_mesh['proj'].T @ source_mesh['viewport'].T).shape}")
     # while True:
     #     continue
-    tmp_Us = torch.tensor(np.einsum('bmn,np->bmp', tmp_views.transpose(0, 2, 1), source_mesh['proj'].T @ source_mesh['viewport'].T)).float()
+
+    tmp_Us = torch.tensor(np.einsum('bmn,bnp->bmp', tmp_views.transpose(0, 2, 1), projects.transpose(0, 2, 1) @ source_mesh['viewport'].T)).float()
     t_xs = tmp_Us[:, 3, 0]
     t_ys = tmp_Us[:, 3, 1]
     t_zs = tmp_Us[:, 3, 2]
@@ -453,14 +480,14 @@ def filter_mesh(meshes, source_mesh, SCALE):
     # t_ys_adapted = torch.tensor(t_ys)
     # t_zs_adapted = torch.tensor(t_zs)
     
-    t_xs_filtered = torch.tensor(filter_values(t_xs_adapted.numpy())).float()
-    t_ys_filtered = torch.tensor(filter_values(t_ys_adapted.numpy())).float()
+    # t_xs_filtered = torch.tensor(filter_values(t_xs_adapted.numpy())).float()
+    # t_ys_filtered = torch.tensor(filter_values(t_ys_adapted.numpy())).float()
     t_zs_filtered = torch.tensor(filter_values(t_zs_adapted.numpy())).float()
-    # t_xs_filtered = t_xs_adapted
-    # t_ys_filtered = t_ys_adapted
+    t_xs_filtered = t_xs_adapted
+    t_ys_filtered = t_ys_adapted
     # t_zs_filtered = t_zs_adapted
     
-    for R_x, R_y, R_z, t_x, t_y, t_z, view_t_x, view_t_y, view_t_z, mesh in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered, t_xs_filtered, t_ys_filtered, t_zs_filtered, view_t_xs, view_t_ys, view_t_zs, meshes):
+    for R_x, R_y, R_z, t_x, t_y, t_z, view_t_x, view_t_y, view_t_z, project, mesh in zip(R_xs_filtered, R_ys_filtered, R_zs_filtered, t_xs_filtered, t_ys_filtered, t_zs_filtered, view_t_xs, view_t_ys, view_t_zs, projects, meshes):
         new_R = torch.tensor(euler2matrix([R_x, R_y, R_z])).float()
         new_t = torch.stack([t_x, t_y, t_z], dim=0).float()
         new_view_t = torch.tensor(np.stack([view_t_x, view_t_y, view_t_z], axis=0)).float()
@@ -478,7 +505,7 @@ def filter_mesh(meshes, source_mesh, SCALE):
         # trans_src[:2, 3] = new_t[:2].numpy().astype(np.float32)
         # print(f'raw t: {source_mesh["U"][3, :3]}')
         print(f'driving t: {new_t}')
-        final_U = rot_src.T @ source_mesh['proj'].T @ trans_src.T
+        final_U = rot_src.T @ project.T @ trans_src.T
         final_U[3, :3] = new_t.numpy().astype(np.float32)[:3]
     
         # final_U = mesh['view'].T @ source_mesh['proj'].T @ mesh['viewport'].T
@@ -881,6 +908,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     fids = []
     
     mp_meshes = []
+    he_preds = []
     for frame_path in driving_frames_path:
         driving_frame = imageio.imread(os.path.join(opt.driving_dir, 'frames', frame_path))
         driving_video.append(driving_frame)
@@ -888,6 +916,9 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
         mp_meshes.append(mp_mesh)
         fid = int(frame_path.split('.png')[0])
         fids.append(fid)
+        with torch.no_grad():
+            he_pred = he_estimator(torch.tensor(img_as_float32(driving_frame)).unsqueeze(0).permute(0, 3, 1, 2).cuda())
+        he_preds.append(he_pred)
         
     order = torch.tensor(fids).argsort()
     # print(f'driving frame shape: {driving_frame')
@@ -896,7 +927,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
     driving_video = driving_video.permute(0, 3, 1, 2).float()
     
     mp_meshes = [mp_meshes[i] for i in order]
-    
+    he_preds = [he_preds[i] for i in order]
     # section_indices = []
     # sections_indices_splitted = []
     # for sec in sections:
@@ -1136,11 +1167,11 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             final_r = delta_r.as_matrix() @ r.as_matrix()
         
             # use driving R
-            final_r = driving_pose['R']
-            rot_src[:3, :3] = final_r
+            # final_r = driving_pose['R']
+            # rot_src[:3, :3] = final_r
             
             final_r = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, :3]
-            
+            # he_preds[driven_pose_index]['R'][0].detach().cpu().numpy()
             mesh['R'] = final_r
 
             trans_x = 0
@@ -1154,6 +1185,7 @@ def test_model(opt, generator, exp_transformer, kp_extractor, he_estimator, gpu_
             print(f'driving t; {final_trans}')
             # print(f'final_trans: {final_trans}')
             final_trans = driving_landmarks[driven_pose_index]['p']['view'].copy()[:3, 3]
+            # final_trans = he_preds[driven_pose_index]['t'][0].detach().cpu().numpy()
             # print(f'pose_idx: {driven_pose_index}')
             # print(f"U: {driving_landmarks[driven_pose_index]['p']['U']}")
             mesh['t'] = final_trans

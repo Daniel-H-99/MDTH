@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--config", default="config/vox-256.yaml", help="path to config")
     parser.add_argument("--mode", default="train", choices=["train",])
-    parser.add_argument("--stage", default=1, type=int, choices=[1, 2, -1])
+    parser.add_argument("--stage", default=1, type=int, choices=[1, 2, 3, 4, -1])
     parser.add_argument("--gen", default="spade", choices=["original", "spade"])
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
@@ -85,11 +85,11 @@ if __name__ == "__main__":
     # if opt.verbose:
     #     print(kp_detector)
 
-    # he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
-    #                            **config['model_params']['common_params'])
+    he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
+                               **config['model_params']['common_params'])
 
-    # if torch.cuda.is_available():
-    #     he_estimator.to(opt.device_ids[0])
+    if torch.cuda.is_available():
+        he_estimator.to(opt.device_ids[0])
 
 
     exp_transformer = ExpTransformer(**config['model_params']['exp_transformer_params'],
@@ -107,4 +107,4 @@ if __name__ == "__main__":
 
     if opt.mode == 'train':
         print(f"Training with stage {opt.stage}...")
-        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, None, None, opt.checkpoint, opt.checkpoint_ref, log_dir, dataset, opt.device_ids)
+        train_transformer(config, opt.stage, exp_transformer, generator, discriminator, None, he_estimator, opt.checkpoint, opt.checkpoint_ref, log_dir, dataset, opt.device_ids)
